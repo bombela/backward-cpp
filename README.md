@@ -15,8 +15,8 @@ There is not much to say. Of course it will be able to display the code
 snippets only if the source files are accessible (else see trace #4 in the
 example).
 
-All "Source" line and code snippet prefixed by a pipe "|" are source code that
-inlines the trace.
+All "Source" lines and code snippet prefixed by a pipe "|" are frames inline
+the next frame.
 You can see that for the trace #1 in the example, the function
 `you_shall_not_pass()` was inlined in the function `...read2::do_test()` by the
 compiler.
@@ -26,9 +26,9 @@ compiler.
 #### Install backward.hpp
 
 Backward is a header only library. So installing Backward is easy, simply drop
-a copy of `backward.hpp` along with your other source file in your C++ project.
-You can also use a git submodule or really any other way that fit bests your
-environment, as long as you can import `backward.hpp`.
+a copy of `backward.hpp` along with your other source files in your C++ project.
+You can also use a git submodule or really any other way that best fits your
+environment, as long as you can include `backward.hpp`.
 
 #### Install backward.cpp
 
@@ -36,18 +36,18 @@ If you want Backward to automatically print a stack trace on most common fatal
 errors (segfault, abort, un-handled exception...), simply add a copy of
 `backward.cpp` to your project, and don't forget to tell your build system.
 
-The code in `backward.cpp` is trivial anyway, you can simply copy what's its
+The code in `backward.cpp` is trivial anyway, you can simply copy what it's
 doing at your convenience.
 
 ##Configuration & Dependencies
 
 ### Compile with debug info
 
-You need to compile your project with the generation of the debug symbols
-enabled, usually `-g` with clang++ and g++.
+You need to compile your project with generation of debug symbols enabled,
+usually `-g` with clang++ and g++.
 
 Note that you can use `-g` with any level of optimization, with modern debug
-information encoding like DWARF, it only takes space in the binary (its not
+information encoding like DWARF, it only takes space in the binary (it'ss not
 loaded in memory until your debugger or Backward makes use of it, don't worry),
 and it doesn't impact the code generation (at least on GNU/Linux x86\_64 for
 what I know).
@@ -57,7 +57,7 @@ your sources.
 
 ### Libraries to read the debug info
 
-Backward support pretty printed stack trace on GNU/Linux only, it will compile
+Backward support pretty printed stack traces on GNU/Linux only, it will compile
 fine under other platforms but will not do anything.  **Pull requests are
 welcome :)**
 
@@ -67,8 +67,8 @@ Also, by default you will get a really basic stack trace, based on the
 ![default trace](doc/nice.png)
 
 You will need to install some dependencies to get the ultimate stack trace. Two
-libraries are currently supported, the only difference is which one is easier
-for you to install, so pick your poison:
+libraries are currently supported, the only difference is which one is the
+easiest for you to install, so pick your poison:
 
 #### libbfd from the [GNU/binutils](http://www.gnu.org/software/binutils/)
 
@@ -93,19 +93,19 @@ Of course you can simply add the define (`-DBACKWARD_HAS_...=1`) and the
 linkage details in your build system and even auto-detect which library is
 installed, it's up to you.
 
-Thats it, you are all set, you should be getting nice stack trace like the one
-at the beginning of this document.
+That'ss it, you are all set, you should be getting nice stack traces like the
+one at the beginning of this document.
 
 ## API
 
-If you don't want to limit yourself to the default offered by `backward.cpp`,
-and you want to take some random stack trace for whatever reason and pretty
+If you don't want to limit yourself to the defaults offered by `backward.cpp`,
+and you want to take some random stack traces for whatever reason and pretty
 print them the way you love or you decide to send them all to your buddies over
-the internet, you will appreciate the simplicity of Backward's API.
+the Internet, you will appreciate the simplicity of Backward's API.
 
 ### Stacktrace
 
-The Stacktrace object let you take a "snapshot" of the current stack.
+The Stacktrace class lets you take a "snapshot" of the current stack.
 You can use it like this:
 
 ```c++
@@ -114,7 +114,7 @@ Stacktrace st; st.load_here(32);
 Printer p; p.print(st);
 ```
 
-All the public methods are:
+The public methods are:
 
 ```c++
 class StackTrace { public:
@@ -133,17 +133,17 @@ class StackTrace { public:
 	// 0 means the stack trace comes from the main thread.
 	size_t thread_id() const
 
-	// Retrieve a trace by index. Index is the most recent trace, size()-1
-	// is the older one.
+	// Retrieve a trace by index. 0 is the most recent trace, size()-1 is
+	// the oldest one.
 	Trace operator[](size_t trace_idx)
 };
 ```
 
 ### TraceResolver
 
-The `TraceResolver` does the heavy lifting, and intent to transform a simple
-`Trace` from it's address onto a fully detailed `ResolvedTrace` with the
-filename of the source, line numbers, inliners functions and so on.
+The `TraceResolver` does the heavy lifting, and intends to transform a simple
+`Trace` from its address into a fully detailed `ResolvedTrace` with the
+filename of the source, line numbers, inlined functions and so on.
 
 You can use it like this:
 
@@ -162,11 +162,11 @@ for (size_t i = 0; i < st.size(); ++i) {
 }
 ```
 
-All the public methods are:
+The public methods are:
 
 ```c++
 class TraceResolver { public:
-	// Pre-load whatever is necessary from the stacktrace.
+	// Pre-load whatever is necessary from the stack trace.
 	template <class ST>
 		void load_stacktrace(ST&)
 
@@ -183,22 +183,21 @@ source files in order to extract code snippets.
 
 ```c++
 class SnippetFactory { public:
-	// A snippet is a list of line number and content of the line.
+	// A snippet is a list of line numbers and line contents.
 	typedef std::vector<std::pair<size_t, std::string> > lines_t;
 
-	// Return a snippet starting at line_start with as much as context_size
-	// lines.
+	// Return a snippet starting at line_start with up to context_size lines.
 	lines_t get_snippet(const std::string& filename,
 			size_t line_start, size_t context_size)
 
-	// Return a combined snippet from two different location and combine them
-	// together. context_size / 2 lines will be extracted from each location.
+	// Return a combined snippet from two different locations and combine them.
+	// context_size / 2 lines will be extracted from each location.
 	lines_t get_combined_snippet(
 			const std::string& filename_a, size_t line_a,
 			const std::string& filename_b, size_t line_b,
 			size_t context_size)
 
-	// Tries to return an unified snippet if the two location from the same
+	// Tries to return a unified snippet if the two locations from the same
 	// file are close enough to fit inside one context_size, else returns
 	// the equivalent of get_combined_snippet().
 	lines_t get_coalesced_snippet(const std::string& filename,
@@ -220,7 +219,7 @@ p.address = true;
 p.print(st, stderr);
 ```
 
-You can select few options:
+You can set a few options:
 
 ```c++
 class Printer { public:
@@ -230,17 +229,16 @@ class Printer { public:
 	// Colorize the trace (only set a color when printing on a terminal)
 	bool color = true;
 
-	// Add the address on the trace to every source location.
+	// Add the addresses of every source location to the trace.
 	bool address = false;
 
 	// Even if there is a source location, prints the object the trace comes
 	// from as well.
 	bool object = false;
 
-	// Resolve and print a stacktrace. It takes a C FILE* object, for the only
-	// reason that it is possible to access the underalying OS-level file
-	// descriptor, which is then used to determine if the output is a terminal
-	// to print in color.
+	// Resolve and print a stack trace. It takes a C FILE* object, only because
+	// it is possible to access the underalying OS-level file descriptor, which
+	// is then used to determine if the output is a terminal to print in color.
 	template <typename StackTrace>
 		FILE* print(StackTrace& st, FILE* os = stderr)
 ```
@@ -251,7 +249,7 @@ class Printer { public:
 A simple helper class that registers for you the most common signals and other
 callbacks to segfault, hardware exception, un-handled exception etc.
 
-`backward.cpp` uses it simply like that:
+`backward.cpp` simply uses it like that:
 
 ```c++
 backward::SignalHandling sh;
@@ -307,7 +305,7 @@ struct ResolvedTrace: public TraceWithLocals {
 	// In which binary object this trace is located.
 	std::string                    object_filename;
 
-	// The function in the object that contain the trace. This is not the same
+	// The function in the object that contains the trace. This is not the same
 	// as source.function which can be an function inlined in object_function.
 	std::string                    object_function;
 
@@ -317,9 +315,9 @@ struct ResolvedTrace: public TraceWithLocals {
 	// binary object.
 	SourceLoc                      source;
 
-	// An optionals list of "inliners". All the successive sources location
-	// from where the source location of the trace (the attribute right above)
-	// is inlined. It is especially useful when you compile with optimization.
+	// An optional list of "inliners". All of these sources locations where
+	// inlined in the source location of the trace (the attribute right above).
+	// This is especially useful when you compile with optimizations turned on.
 	typedef std::vector<SourceLoc> source_locs_t;
 	source_locs_t                  inliners;
 };
