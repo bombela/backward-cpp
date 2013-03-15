@@ -325,5 +325,12 @@ struct ResolvedTrace: public TraceWithLocals {
 
 ## Contact and copyright
 
-François-Xavier Bourlet <bombela@gmail.com>.
+François-Xavier Bourlet <bombela@gmail.com>
+
+Copyright 2013 Google Inc. All Rights Reserved.
 MIT License.
+
+### Disclaimer
+
+Although this project is owned by Google Inc. this is not a Google supported or
+affiliated project.
