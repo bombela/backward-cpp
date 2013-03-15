@@ -23,14 +23,14 @@ compiler.
 
 ##Installation
 
-#### Install backward.*hpp*
+#### Install backward._hpp_
 
 Backward is a header only library. So installing Backward is easy, simply drop
 a copy of `backward.hpp` along with your other source file in your C++ project.
 You can also use a git submodule or really any other way that fit bests your
 environment, as long as you can import `backward.hpp`.
 
-#### Install backward.*cpp*
+#### Install backward._cpp_
 
 If you want Backward to automatically print a stack trace on most common fatal
 errors (segfault, abort, un-handled exception...), simply add a copy of
@@ -99,9 +99,9 @@ at the beginning of this document.
 ## API
 
 If you don't want to limit yourself to the default offered by `backward.cpp`,
-that you want take random stack trace for whatever reason and pretty print them
-the way you prefer or send to your buddies over the internet, you will
-appreciate the simplicity of Backward's API.
+and you want to take some random stack trace for whatever reason and pretty
+print them the way you love or you decide to send them all to your buddies over
+the internet, you will appreciate the simplicity of Backward's API.
 
 ### Stacktrace
 
