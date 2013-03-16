@@ -145,7 +145,26 @@
 
 
 #	if BACKWARD_HAS_UNWIND == 1
+
 #		include <unwind.h>
+// while gcc's unwind.h defines something like that:
+//  extern _Unwind_Ptr _Unwind_GetIP (struct _Unwind_Context *);
+//  extern _Unwind_Ptr _Unwind_GetIPInfo (struct _Unwind_Context *, int *);
+//
+// clang's unwind.h defines something like this:
+//  uintptr_t _Unwind_GetIP(struct _Unwind_Context* __context);
+//
+// Even if the _Unwind_GetIPInfo can be linked to, it is not declared, worse we
+// cannot just redeclare it because clang's unwind.h doesn't define _Unwind_Ptr
+// anyway.
+//
+// Luckily we can play on the fact that the guard macros have a different name:
+#ifdef __CLANG_UNWIND_H
+// In fact, this function still comes from libgcc (on my different linux boxes,
+// clang links against libgcc).
+extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
+#endif
+
 #	endif
 
 #	include <cxxabi.h>

@@ -22,6 +22,7 @@
  */
 
 //#define BACKWARD_SYSTEN_UNKNOWN
+#define BACKWARD_HAS_DW 1
 //#define BACKWARD_HAS_BFD 0
 //#define BACKWARD_CXX98
 

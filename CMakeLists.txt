@@ -80,7 +80,7 @@ set(TESTS
 	invalidread2
 	)
 
-set(some_definition "BACKWARD_HAS_BFD=1")
+set(some_definition "BACKWARD_HAS_DW=1")
 #set(some_definition "BACKWARD_NOTHING")
 foreach(test ${TESTS})
 	backward_add_test(test/${test}.cpp backward.cpp ${some_definition})
