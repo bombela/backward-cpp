@@ -162,6 +162,7 @@
 #ifdef __CLANG_UNWIND_H
 // In fact, this function still comes from libgcc (on my different linux boxes,
 // clang links against libgcc).
+#		include <inttypes.h>
 extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 #endif
 
@@ -389,8 +390,8 @@ public:
 /*************** A TRACE ***************/
 
 struct Trace {
-	void*  addr;
-	size_t idx;
+	void*    addr;
+	unsigned idx;
 
 	Trace():
 		addr(0), idx(0) {}
@@ -475,8 +476,8 @@ struct ResolvedTrace: public TraceWithLocals {
 	struct SourceLoc {
 		std::string function;
 		std::string filename;
-		size_t      line;
-		size_t      col;
+		unsigned    line;
+		unsigned    col;
 
 		SourceLoc(): line(0), col(0) {}
 
@@ -527,7 +528,7 @@ public:
 	Trace operator[](size_t) { return Trace(); }
 	size_t load_here(size_t=0) { return 0; }
 	size_t load_from(void*, size_t=0) { return 0; }
-	size_t thread_id() const { return 0; }
+	unsigned thread_id() const { return 0; }
 };
 
 #ifdef BACKWARD_SYSTEM_LINUX
@@ -536,7 +537,7 @@ class StackTraceLinuxImplBase {
 public:
 	StackTraceLinuxImplBase(): _thread_id(0), _skip(0) {}
 
-	size_t thread_id() const {
+	unsigned thread_id() const {
 		return _thread_id;
 	}
 
@@ -1057,7 +1058,7 @@ private:
 		bfd_symtab_t dynamic_symtab;
 	};
 
-	typedef typename details::hashtable<std::string, bfd_fileobject>::type
+	typedef details::hashtable<std::string, bfd_fileobject>::type
 		fobj_bfd_map_t;
 	fobj_bfd_map_t      _fobj_bfd_map;
 
@@ -1070,7 +1071,7 @@ private:
 			_bfd_loaded = true;
 		}
 
-		typename fobj_bfd_map_t::iterator it =
+		fobj_bfd_map_t::iterator it =
 			_fobj_bfd_map.find(filename_object);
 		if (it != _fobj_bfd_map.end()) {
 			return it->second;
@@ -1428,16 +1429,23 @@ private:
 	struct inliners_search_cb {
 		void operator()(Dwarf_Die* die) {
 			switch (dwarf_tag(die)) {
+				const char* name;
 				case DW_TAG_subprogram:
-					trace.source.function = dwarf_diename(die)?:"";
+					if ((name = dwarf_diename(die))) {
+						trace.source.function = name;
+					}
 					break;
 
 				case DW_TAG_inlined_subroutine:
 					ResolvedTrace::SourceLoc sloc;
 					Dwarf_Attribute attr_mem;
 
-					sloc.function = dwarf_diename(die)?:"";
-					sloc.filename = die_call_file(die)?:"";
+					if ((name = dwarf_diename(die))) {
+						trace.source.function = name;
+					}
+					if ((name = die_call_file(die))) {
+						sloc.filename = name;
+					}
 
 					Dwarf_Word line = 0, col = 0;
 					dwarf_formudata(dwarf_attr(die, DW_AT_call_line,
@@ -1859,14 +1867,14 @@ public:
 
 			fprintf(os, "Stack trace (most recent call last)");
 			if (st.thread_id()) {
-				fprintf(os, " in thread %zi:\n", st.thread_id());
+				fprintf(os, " in thread %u:\n", st.thread_id());
 			} else {
 				fprintf(os, ":\n");
 			}
 
 			_resolver.load_stacktrace(st);
-			for (size_t trace_idx = st.size(); trace_idx > 0; --trace_idx) {
-				fprintf(os, "#%-2zi", trace_idx);
+			for (unsigned trace_idx = st.size(); trace_idx > 0; --trace_idx) {
+				fprintf(os, "#%-2u", trace_idx);
 				bool already_indented = true;
 				const ResolvedTrace trace = _resolver.resolve(st[trace_idx-1]);
 
@@ -1942,8 +1950,8 @@ private:
 	void print_source_loc(FILE* os, const char* indent,
 			const ResolvedTrace::SourceLoc& source_loc,
 			void* addr=0) {
-		fprintf(os, "%sSource \"%s\", line %zi, in %s",
-				indent, source_loc.filename.c_str(), source_loc.line,
+		fprintf(os, "%sSource \"%s\", line %i, in %s",
+				indent, source_loc.filename.c_str(), (int)source_loc.line,
 				source_loc.function.c_str());
 
 		if (address and addr != 0) {
