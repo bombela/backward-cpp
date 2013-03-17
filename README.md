@@ -259,7 +259,7 @@ Creating the object registers all the different signals and hooks. Destroying
 this object doesn't do anything. It exposes only one method:
 
 ```c++
-bool loaded() const // true if loaded with success
+bool loaded() const; // true if loaded with success
 ```
 
 ### Trace object
