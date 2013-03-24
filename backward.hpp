@@ -2010,8 +2010,25 @@ private:
 class SignalHandling {
 public:
 	SignalHandling(): _loaded(false) {
-		// TODO: add a signal dedicated stack, so we can handle stack-overflow.
 		bool success = true;
+
+		const size_t stack_size = 1024 * 1024 * 8;
+		_stack_content.reset((char*)malloc(stack_size));
+		if (_stack_content) {
+			stack_t ss;
+			ss.ss_sp = _stack_content.get();
+			ss.ss_size = stack_size;
+			ss.ss_flags = 0;
+			std::cout << "stack "
+				<< ss.ss_sp << " - " << (void*)(((char*)ss.ss_sp) + ss.ss_size)
+				<< std::endl;
+			if (sigaltstack(&ss, 0) < 0) {
+				success = false;
+			}
+		} else {
+			success = false;
+		}
+
 		const int signals[] = {
 			// default action: Core
 			SIGILL,
@@ -2048,7 +2065,7 @@ public:
 				sig != signals + sizeof signals / sizeof *signals; ++sig) {
 
 			struct sigaction action;
-			action.sa_flags = SA_SIGINFO;
+			action.sa_flags = SA_SIGINFO | SA_ONSTACK;
 			sigemptyset(&action.sa_mask);
 			action.sa_sigaction = &sig_handler;
 
@@ -2061,7 +2078,8 @@ public:
 	bool loaded() const { return _loaded; }
 
 private:
-	bool _loaded;
+	details::handle<char*> _stack_content;
+	bool                   _loaded;
 
 	static void sig_handler(int, siginfo_t* info, void* _ctx) {
 		ucontext_t *uctx = (ucontext_t*) _ctx;
@@ -2086,7 +2104,8 @@ private:
 		printer.print(st, stderr);
 
 		psiginfo(info, 0);
-		exit(EXIT_FAILURE);
+		// terminate the process immediately.
+		_exit(EXIT_FAILURE);
 	}
 };
 
