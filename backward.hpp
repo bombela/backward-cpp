@@ -253,7 +253,7 @@ namespace stacktrace_tag {
 	struct backtrace;
 
 #	if   BACKWARD_HAS_UNWIND == 1
-	typedef unwind currnet;
+	typedef unwind current;
 #	elif BACKWARD_HAS_BACKTRACE == 1
 	typedef backtrace current;
 #	else
@@ -1836,7 +1836,7 @@ namespace Color {
 class Colorize {
 public:
 	Colorize(std::FILE*) {}
-	void init();
+	void init() {}
 	void set_color(Color::type) {}
 };
 
