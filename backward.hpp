@@ -1836,7 +1836,7 @@ namespace Color {
 class Colorize {
 public:
 	Colorize(std::FILE*) {}
-	void init();
+	void init() {}
 	void set_color(Color::type) {}
 };
 
