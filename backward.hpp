@@ -62,6 +62,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <cstdint>
 #include <new>
 #include <iomanip>
 #include <vector>
@@ -1940,7 +1941,13 @@ private:
 			} else {
 				fprintf(os, "%s ", indent);
 			}
-			fprintf(os, "%4li: %s\n", it->first, it->second.c_str());
+#if (SIZE_MAX == UINT64_MAX)
+			fprintf(os, "%4lu: %s\n", it->first, it->second.c_str());
+#elif (SIZE_MAX == UINT32_MAX)
+			fprintf(os, "%4u: %s\n", it->first, it->second.c_str());
+#else
+#	error "Unsupported size_t size"
+#endif
 			if (it-> first == source_loc.line) {
 				colorize.set_color(Color::reset);
 			}
