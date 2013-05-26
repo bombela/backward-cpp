@@ -2007,8 +2007,11 @@ private:
 
 #ifdef BACKWARD_SYSTEM_LINUX
 
-std::vector<int> make_default_signals() {
-	const int signals[] = {
+
+class SignalHandling {
+public:
+   static std::vector<int> make_default_signals() {
+       const int signals[] = {
 		// default action: Core
 		SIGILL,
 		SIGABRT,
@@ -2037,20 +2040,10 @@ std::vector<int> make_default_signals() {
 		SIGXCPU,
 		SIGXFSZ
 	};
-	std::vector<int> result;
-	for (const int* sig = signals;
-		sig != signals + sizeof signals / sizeof *signals; ++sig) {
-		result.push_back(*sig);
-	}
-	return result;
-}
+        return std::vector<int>(signals, signals + sizeof signals);
+   }
 
-
-const std::vector<int> default_signals = make_default_signals();
-
-class SignalHandling {
-public:
-	SignalHandling(const std::vector<int>& signals = default_signals): _loaded(false) {
+  SignalHandling(const std::vector<int>& signals = make_default_signals()) : _loaded(false) { 
 		bool success = true;
 
 		const size_t stack_size = 1024 * 1024 * 8;

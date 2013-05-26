@@ -69,6 +69,7 @@ set(TESTS
 	invalidread
 	suicide
 	divbyzero
+        select_signals
 	)
 
 foreach(test ${TESTS})
