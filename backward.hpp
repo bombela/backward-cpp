@@ -2115,7 +2115,7 @@ private:
 
 class SignalHandling {
 public:
-	SignalHandling() {}
+	SignalHandling(const std::vector<int>& signals = std::vector<int>()) {}
 	bool init() { return false; }
 };
 
