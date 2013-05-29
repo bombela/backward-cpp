@@ -2007,9 +2007,43 @@ private:
 
 #ifdef BACKWARD_SYSTEM_LINUX
 
+
 class SignalHandling {
 public:
-	SignalHandling(): _loaded(false) {
+   static std::vector<int> make_default_signals() {
+       const int signals[] = {
+		// default action: Core
+		SIGILL,
+		SIGABRT,
+		SIGFPE,
+		SIGSEGV,
+		SIGBUS,
+		// I am not sure the following signals should be enabled by
+		// default:
+		// default action: Term
+		SIGHUP,
+		SIGINT,
+		SIGPIPE,
+		SIGALRM,
+		SIGTERM,
+		SIGUSR1,
+		SIGUSR2,
+		SIGPOLL,
+		SIGPROF,
+		SIGVTALRM,
+		SIGIO,
+		SIGPWR,
+		// default action: Core
+		SIGQUIT,
+		SIGSYS,
+		SIGTRAP,
+		SIGXCPU,
+		SIGXFSZ
+	};
+        return std::vector<int>(signals, signals + sizeof signals);
+   }
+
+  SignalHandling(const std::vector<int>& signals = make_default_signals()) : _loaded(false) { 
 		bool success = true;
 
 		const size_t stack_size = 1024 * 1024 * 8;
@@ -2029,47 +2063,13 @@ public:
 			success = false;
 		}
 
-		const int signals[] = {
-			// default action: Core
-			SIGILL,
-			SIGABRT,
-			SIGFPE,
-			SIGSEGV,
-			SIGBUS,
-
-			// I am not sure the following signals should be enabled by
-			// default:
-
-			// default action: Term
-			SIGHUP,
-			SIGINT,
-			SIGPIPE,
-			SIGALRM,
-			SIGTERM,
-			SIGUSR1,
-			SIGUSR2,
-			SIGPOLL,
-			SIGPROF,
-			SIGVTALRM,
-			SIGIO,
-			SIGPWR,
-
-			// default action: Core
-			SIGQUIT,
-			SIGSYS,
-			SIGTRAP,
-			SIGXCPU,
-			SIGXFSZ
-		};
-		for (const int* sig = signals;
-				sig != signals + sizeof signals / sizeof *signals; ++sig) {
-
+		for (size_t i = 0; i < signals.size(); ++i) {
 			struct sigaction action;
 			action.sa_flags = SA_SIGINFO | SA_ONSTACK;
 			sigemptyset(&action.sa_mask);
 			action.sa_sigaction = &sig_handler;
 
-			int r = sigaction(*sig, &action, 0);
+			int r = sigaction(signals[i], &action, 0);
 			if (r < 0) success = false;
 		}
 		_loaded = success;
@@ -2115,7 +2115,7 @@ private:
 
 class SignalHandling {
 public:
-	SignalHandling() {}
+	SignalHandling(const std::vector<int>& signals = std::vector<int>()) {}
 	bool init() { return false; }
 };
 

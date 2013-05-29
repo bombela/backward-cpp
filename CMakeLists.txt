@@ -69,6 +69,7 @@ set(TESTS
 	invalidread
 	suicide
 	divbyzero
+        select_signals
 	)
 
 foreach(test ${TESTS})
@@ -77,7 +78,6 @@ endforeach()
 
 set(TESTS
 	invalidread2
-	stackoverflow
 	)
 
 set(some_definition "BACKWARD_HAS_DW=1")
