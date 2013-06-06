@@ -2053,9 +2053,6 @@ public:
 			ss.ss_sp = _stack_content.get();
 			ss.ss_size = stack_size;
 			ss.ss_flags = 0;
-			std::cout << "stack "
-				<< ss.ss_sp << " - " << (void*)(((char*)ss.ss_sp) + ss.ss_size)
-				<< std::endl;
 			if (sigaltstack(&ss, 0) < 0) {
 				success = false;
 			}
