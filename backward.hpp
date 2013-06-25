@@ -390,8 +390,8 @@ public:
 /*************** A TRACE ***************/
 
 struct Trace {
-	void*    addr;
-	unsigned idx;
+	void*  addr;
+	size_t idx;
 
 	Trace():
 		addr(0), idx(0) {}
@@ -1605,13 +1605,13 @@ class TraceResolver:
 
 class SourceFile {
 public:
-	typedef std::vector<std::pair<size_t, std::string> > lines_t;
+	typedef std::vector<std::pair<unsigned, std::string> > lines_t;
 
 	SourceFile() {}
 	SourceFile(const std::string& path): _file(new std::ifstream(path.c_str())) {}
 	bool is_open() const { return _file->is_open(); }
 
-	lines_t& get_lines(size_t line_start, size_t line_count, lines_t& lines) {
+	lines_t& get_lines(unsigned line_start, unsigned line_count, lines_t& lines) {
 		using namespace std;
 		// This function make uses of the dumbest algo ever:
 		//	1) seek(0)
@@ -1625,7 +1625,7 @@ public:
 		_file->clear();
 		_file->seekg(0);
 		string line;
-		size_t line_idx;
+		unsigned line_idx;
 
 		for (line_idx = 1; line_idx < line_start; ++line_idx) {
 			getline(*_file, line);
@@ -1665,7 +1665,7 @@ public:
 		return lines;
 	}
 
-	lines_t get_lines(size_t line_start, size_t line_count) {
+	lines_t get_lines(unsigned line_start, unsigned line_count) {
 		lines_t lines;
 		return get_lines(line_start, line_count, lines);
 	}
@@ -1724,17 +1724,17 @@ public:
 	typedef SourceFile::lines_t lines_t;
 
 	lines_t get_snippet(const std::string& filename,
-			size_t line_start, size_t context_size) {
+			unsigned line_start, unsigned context_size) {
 
 		SourceFile& src_file = get_src_file(filename);
-		size_t start = line_start - context_size / 2;
+		unsigned start = line_start - context_size / 2;
 		return src_file.get_lines(start, context_size);
 	}
 
 	lines_t get_combined_snippet(
-			const std::string& filename_a, size_t line_a,
-			const std::string& filename_b, size_t line_b,
-			size_t context_size) {
+			const std::string& filename_a, unsigned line_a,
+			const std::string& filename_b, unsigned line_b,
+			unsigned context_size) {
 		SourceFile& src_file_a = get_src_file(filename_a);
 		SourceFile& src_file_b = get_src_file(filename_b);
 
@@ -1746,12 +1746,12 @@ public:
 	}
 
 	lines_t get_coalesced_snippet(const std::string& filename,
-			size_t line_a, size_t line_b, size_t context_size) {
+			unsigned line_a, unsigned line_b, unsigned context_size) {
 		SourceFile& src_file = get_src_file(filename);
 
 		using std::min; using std::max;
-		size_t a = min(line_a, line_b);
-		size_t b = max(line_a, line_b);
+		unsigned a = min(line_a, line_b);
+		unsigned b = max(line_a, line_b);
 
 		if ((b - a) < (context_size / 3)) {
 			return src_file.get_lines((a + b - context_size + 1) / 2,
@@ -1940,7 +1940,7 @@ private:
 			} else {
 				fprintf(os, "%s ", indent);
 			}
-			fprintf(os, "%4li: %s\n", it->first, it->second.c_str());
+			fprintf(os, "%4u: %s\n", it->first, it->second.c_str());
 			if (it-> first == source_loc.line) {
 				colorize.set_color(Color::reset);
 			}
