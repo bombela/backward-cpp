@@ -36,7 +36,7 @@ using namespace backward;
 
 int some_counter;
 
-typedef StackTraceWithLocals stacktrace_t;
+typedef StackTrace stacktrace_t;
 
 void end_of_our_journey(stacktrace_t& st) {
 	if (not st.size()) {

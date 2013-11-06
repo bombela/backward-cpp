@@ -247,22 +247,6 @@ namespace system_tag {
 } // namespace system_tag
 
 
-namespace stacktrace_tag {
-#ifdef BACKWARD_SYSTEM_LINUX
-	struct unwind;
-	struct backtrace;
-
-#	if   BACKWARD_HAS_UNWIND == 1
-	typedef unwind current;
-#	elif BACKWARD_HAS_BACKTRACE == 1
-	typedef backtrace current;
-#	else
-#		error "I know it's difficult but you need to make a choice!"
-#	endif
-#endif // BACKWARD_SYSTEM_LINUX
-} // namespace stacktrace_tag
-
-
 namespace trace_resolver_tag {
 #ifdef BACKWARD_SYSTEM_LINUX
 	struct libdw;
@@ -280,6 +264,7 @@ namespace trace_resolver_tag {
 #	endif
 #endif // BACKWARD_SYSTEM_LINUX
 } // namespace trace_resolver_tag
+
 
 namespace details {
 
@@ -390,8 +375,8 @@ public:
 /*************** A TRACE ***************/
 
 struct Trace {
-	void*  addr;
-	size_t idx;
+	void*    addr;
+	unsigned idx;
 
 	Trace():
 		addr(0), idx(0) {}
@@ -400,78 +385,7 @@ struct Trace {
 		addr(addr), idx(idx) {}
 };
 
-// Really simple, generic, and dumb representation of a variable.
-// A variable has a name and can represent either:
-//  - a value (as a string)
-//  - a list of values (a list of strings)
-//  - a map of values (a list of variable)
-class Variable {
-public:
-	enum Kind { VALUE, LIST, MAP };
-
-	typedef std::vector<std::string> list_t;
-	typedef std::vector<Variable>    map_t;
-
-	std::string name;
-	Kind kind;
-
-	Variable(Kind k): kind(k) {
-		switch (k) {
-			case VALUE:
-				new (&storage) std::string();
-				break;
-
-			case LIST:
-				new (&storage) list_t();
-				break;
-
-			case MAP:
-				new (&storage) map_t();
-				break;
-		}
-	}
-
-	std::string& value() {
-		return reinterpret_cast<std::string&>(storage);
-	}
-	list_t& list() {
-		return reinterpret_cast<list_t&>(storage);
-	}
-	map_t& map() {
-		return reinterpret_cast<map_t&>(storage);
-	}
-
-
-	const std::string& value() const {
-		return reinterpret_cast<const std::string&>(storage);
-	}
-	const list_t& list() const {
-		return reinterpret_cast<const list_t&>(storage);
-	}
-	const map_t& map() const {
-		return reinterpret_cast<const map_t&>(storage);
-	}
-
-private:
-	// the C++98 style union for non-trivial objects, yes yes I know, its not
-	// aligned as good as it can be, blabla... Screw this.
-	union {
-		char s1[sizeof (std::string)];
-		char s2[sizeof (list_t)];
-		char s3[sizeof (map_t)];
-	} storage;
-};
-
-struct TraceWithLocals: public Trace {
-	// Locals variable and values.
-	std::vector<Variable> locals;
-
-	TraceWithLocals(): Trace() {}
-	TraceWithLocals(const Trace& mini_trace):
-		Trace(mini_trace) {}
-};
-
-struct ResolvedTrace: public TraceWithLocals {
+struct ResolvedTrace: public Trace {
 
 	struct SourceLoc {
 		std::string function;
@@ -512,10 +426,10 @@ struct ResolvedTrace: public TraceWithLocals {
 	typedef std::vector<SourceLoc> source_locs_t;
 	source_locs_t                  inliners;
 
+	ResolvedTrace():
+		Trace() {}
 	ResolvedTrace(const Trace& mini_trace):
-		TraceWithLocals(mini_trace) {}
-	ResolvedTrace(const TraceWithLocals& mini_trace_with_locals):
-		TraceWithLocals(mini_trace_with_locals) {}
+		Trace(mini_trace) {}
 };
 
 /*************** STACK TRACE ***************/
@@ -717,85 +631,6 @@ public:
 
 class StackTrace:
 	public StackTraceImpl<system_tag::current_tag> {};
-
-/*********** STACKTRACE WITH LOCALS ***********/
-
-// default implemention.
-template <typename TAG>
-class StackTraceWithLocalsImpl:
-	public StackTrace {};
-
-#ifdef BACKWARD_SYSTEM_LINUX
-#if BACKWARD_HAS_UNWIND
-#if BACKWARD_HAS_DW
-
-template <>
-class StackTraceWithLocalsImpl<system_tag::linux_tag>:
-	public StackTraceLinuxImplBase {
-public:
-	__attribute__ ((noinline)) // TODO use some macro
-	size_t load_here(size_t depth=32) {
-		load_thread_info();
-		if (depth == 0) {
-			return 0;
-		}
-		_stacktrace.resize(depth);
-		size_t trace_cnt = details::unwind(callback(*this), depth);
-		_stacktrace.resize(trace_cnt);
-		skip_n_firsts(0);
-		return size();
-	}
-	size_t load_from(void* addr, size_t depth=32) {
-		load_here(depth + 8);
-
-		for (size_t i = 0; i < _stacktrace.size(); ++i) {
-			if (_stacktrace[i].addr == addr) {
-				skip_n_firsts(i);
-				break;
-			}
-		}
-		_stacktrace.resize(std::min(_stacktrace.size(),
-					skip_n_firsts() + depth));
-		return size();
-	}
-	size_t size() const {
-		return _stacktrace.size() ? _stacktrace.size() - skip_n_firsts() : 0;
-	}
-	const TraceWithLocals& operator[](size_t idx) {
-		if (idx >= size()) {
-			return _nil_trace;
-		}
-		return _stacktrace[idx + skip_n_firsts()];
-	}
-
-private:
-	std::vector<TraceWithLocals> _stacktrace;
-	TraceWithLocals              _nil_trace;
-
-	void resolve_trace(TraceWithLocals& trace) {
-		Variable v(Variable::VALUE);
-		v.name = "var";
-		v.value() = "42";
-		trace.locals.push_back(v);
-	}
-
-	struct callback {
-		StackTraceWithLocalsImpl& self;
-		callback(StackTraceWithLocalsImpl& self): self(self) {}
-
-		void operator()(size_t idx, void* addr) {
-			self._stacktrace[idx].addr = addr;
-			self.resolve_trace(self._stacktrace[idx]);
-		}
-	};
-};
-
-#endif // BACKWARD_HAS_DW
-#endif // BACKWARD_HAS_UNWIND
-#endif // BACKWARD_SYSTEM_LINUX
-
-class StackTraceWithLocals:
-	public StackTraceWithLocalsImpl<system_tag::current_tag> {};
 
 /*************** TRACE RESOLVER ***************/
 
@@ -1958,47 +1793,6 @@ private:
 			fprintf(os, " [%p]\n", addr);
 		} else {
 			fprintf(os, "\n");
-		}
-	}
-
-	void print_var(FILE* os, const char* base_indent, int indent,
-			const Variable& var) {
-		fprintf(os, "%s%s: ", base_indent, var.name.c_str());
-		switch (var.kind) {
-			case Variable::VALUE:
-				fprintf(os, "%s\n", var.value().c_str());
-				break;
-			case Variable::LIST:
-				fprintf(os, "[");
-				for (size_t i = 0; i < var.list().size(); ++i) {
-					if (i > 0) {
-						fprintf(os, ", %s", var.list()[i].c_str());
-					}
-					fprintf(os, "%s", var.list()[i].c_str());
-				}
-				fprintf(os, "]\n");
-				break;
-			case Variable::MAP:
-				fprintf(os, "{\n");
-				for (size_t i = 0; i < var.map().size(); ++i) {
-					if (i > 0) {
-						fprintf(os, ",\n%s", base_indent);
-					}
-					print_var(os, base_indent, indent + 2, var.map()[i]);
-				}
-				fprintf(os, "]\n");
-				break;
-		};
-	}
-
-	void print_locals(FILE* os, const char* indent,
-			const std::vector<Variable>& locals) {
-		fprintf(os, "%sLocal variables:\n", indent);
-		for (size_t i = 0; i < locals.size(); ++i) {
-			if (i > 0) {
-				fprintf(os, ",\n%s", indent);
-			}
-			print_var(os, indent, 0, locals[i]);
 		}
 	}
 };
