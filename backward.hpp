@@ -112,7 +112,7 @@
 //    - g++/clang++ -ldw ...
 //
 // #define BACKWARD_HAS_BFD 1
-//  - With libbfd, you get a fair about of details:
+//  - With libbfd, you get a fair amount of details:
 //    - object filename
 //    - function name
 //    - source filename
@@ -1441,7 +1441,7 @@ private:
 					Dwarf_Attribute attr_mem;
 
 					if ((name = dwarf_diename(die))) {
-						trace.source.function = name;
+						sloc.function = name;
 					}
 					if ((name = die_call_file(die))) {
 						sloc.filename = name;
