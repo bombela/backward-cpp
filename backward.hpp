@@ -370,6 +370,42 @@ public:
 	}
 };
 
+// Default demangler implementation (do nothing).
+template <typename TAG>
+struct demangler_impl {
+	static std::string demangle(const char* funcname) {
+		return funcname;
+	}
+};
+
+#ifdef BACKWARD_SYSTEM_LINUX
+
+template <>
+struct demangler_impl<system_tag::current_tag> {
+	demangler_impl(): _demangle_buffer_length(0) {}
+
+	std::string demangle(const char* funcname) {
+		using namespace details;
+		_demangle_buffer.reset(
+				abi::__cxa_demangle(funcname, _demangle_buffer.release(),
+					&_demangle_buffer_length, 0)
+				);
+		if (_demangle_buffer) {
+			return _demangle_buffer.get();
+		}
+		return funcname;
+	}
+
+private:
+	details::handle<char*> _demangle_buffer;
+	size_t                 _demangle_buffer_length;
+};
+
+#endif // BACKWARD_SYSTEM_LINUX
+
+struct demangler:
+	public demangler_impl<system_tag::current_tag> {};
+
 } // namespace details
 
 /*************** A TRACE ***************/
@@ -656,20 +692,11 @@ public:
 class TraceResolverLinuxImplBase {
 protected:
 	std::string demangle(const char* funcname) {
-		using namespace details;
-		_demangle_buffer.reset(
-				abi::__cxa_demangle(funcname, _demangle_buffer.release(),
-					&_demangle_buffer_length, 0)
-				);
-		if (_demangle_buffer) {
-			return _demangle_buffer.get();
-		}
-		return funcname;
+		return _demangler.demangle(funcname);
 	}
 
 private:
-	details::handle<char*> _demangle_buffer;
-	size_t                 _demangle_buffer_length;
+	details::demangler _demangler;
 };
 
 template <typename STACKTRACE_TAG>
