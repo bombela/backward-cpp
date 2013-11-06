@@ -11,26 +11,40 @@ Backward will spice it up for you:
 
 ![pretty stackstrace](doc/pretty.png)
 
-There is not much to say. Of course it will be able to display the code
-snippets only if the source files are accessible (else see trace #4 in the
-example).
+Of course it will be able to display the code snippets only if the source files
+are accessible (else see trace #4 in the example).
 
-All "Source" lines and code snippet prefixed by a pipe "|" are frames inline
-the next frame.
+All "Source" lines and code snippet prefixed by a pipe "|" are frames inlined
+in the next one.
 You can see that for the trace #1 in the example, the function
 `you_shall_not_pass()` was inlined in the function `...read2::do_test()` by the
 compiler.
 
+### Uncaught exception
+
+You know
+
+![default exception stackstrace](doc/exception_st_rude.png)
+
+Among other things, Backward can also set a custom std::terminate handler,
+which brings you pretty printed stacktrace on uncaught exceptions.
+
+And if you go the extra mile and use backward::raise(), you get the stack-trace
+of the original exception, no matter how many times the exception was caught
+and re-thrown:
+
+![pretty exception stackstrace](doc/exception_st_pretty.png)
+
 ##Installation
 
-#### Install backward.hpp
+### Install backward.hpp
 
 Backward is a header only library. So installing Backward is easy, simply drop
 a copy of `backward.hpp` along with your other source files in your C++ project.
 You can also use a git submodule or really any other way that best fits your
 environment, as long as you can include `backward.hpp`.
 
-#### Install backward.cpp
+### Install backward.cpp
 
 If you want Backward to automatically print a stack trace on most common fatal
 errors (segfault, abort, un-handled exception...), simply add a copy of

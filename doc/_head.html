@@ -1,0 +1,31 @@
+<html>
+	<head>
+		<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+<!--        <link href="http://kevinburke.bitbucket.org/markdowncss/markdown.css" rel="stylesheet"></link>-->
+		<link href="doc/github.css" rel="stylesheet"></link>
+		<script>
+			function refresh() {
+				$.get(document.location.href, null, function(data) {
+					var new_page = $(data.replace(/(<[ \t]*)(html|head|body)/ig, '$1$2a'));
+					var new_bodya = new_page.find('bodya');
+					var cur_body = $("body");
+					var cur_bodya = cur_body.find("bodya");
+					if (!cur_bodya[0]) {
+						cur_bodya = cur_body;
+					}
+					if (new_bodya.text() == cur_bodya.text()) {
+						return;
+					}
+					var now = Date();
+					console.log('updating body ', now);
+					cur_body.html(new_bodya);
+					$("body").prepend(now);
+				});
+			}
+			$().ready(function() {
+				refresh();
+				setInterval(refresh, 1000);
+			});
+		</script>
+	</head>
+	<body>
