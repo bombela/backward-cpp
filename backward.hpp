@@ -593,7 +593,6 @@ size_t unwind(F f, size_t depth) {
 template <>
 class StackTraceImpl<system_tag::linux_tag>: public StackTraceLinuxImplHolder {
 public:
-	__attribute__ ((noinline)) // TODO use some macro
 	size_t load_here(size_t depth=32) {
 		load_thread_info();
 		if (depth == 0) {
@@ -2042,6 +2041,158 @@ private:
 	ScopedSignalHandling& operator=(ScopedSignalHandling);
 #endif
 };
+
+/************** EXCEPTION UTILITIES *************/
+
+class exception_with_st {
+public:
+#ifdef BACKWARD_ATLEAST_CXX11
+	virtual ~exception_with_st() {}
+#else
+	virtual ~exception_with_st() throw() {}
+#endif
+	exception_with_st() { _st.load_here(); }
+	StackTrace& stacktrace() { return _st; }
+	virtual void rethrow() const = 0;
+private:
+	StackTrace _st;
+};
+
+template <typename E>
+class exception_with_st_mixin: public E, public exception_with_st {
+public:
+	virtual ~exception_with_st_mixin() throw() {}
+	exception_with_st_mixin(const E& e):
+		E(e), exception_with_st() {}
+	virtual void rethrow() const { throw static_cast<const E&>(*this); }
+};
+
+template <typename E>
+inline void raise(const E& e) {
+	throw exception_with_st_mixin<E>(e);
+}
+
+class ExceptionHandling {
+public:
+	ExceptionHandling() {
+		std::set_terminate(&terminate_handler);
+	}
+
+	static void pprint_current_exception() {
+		StackTrace st;
+		st.load_here();
+		print_exception(&st);
+	}
+
+private:
+	static void terminate_handler() {
+		pprint_current_exception();
+		exit(EXIT_FAILURE);
+	}
+
+	static void print_exception(StackTrace* st = 0) {
+		const std::string exception_typename = details::demangler().demangle(
+				abi::__cxa_current_exception_type()->name());
+		try {
+			throw; // rethrow whatever we have got.
+		} catch (exception_with_st& e) {
+			if (st) print_stacktrace(*st);
+			fprintf(stderr, "Exception originally thrown from:\n");
+			print_stacktrace(e.stacktrace());
+			try {
+				e.rethrow();
+			} catch (...) {
+				print_exception();
+			}
+		} catch (const std::exception& e) {
+			if (st) print_stacktrace(*st);
+			fprintf(stderr, "Exception (%s): %s\n",
+					exception_typename.c_str(), e.what());
+		} catch (...) {
+			if (st) print_stacktrace(*st);
+			fprintf(stderr, "Exception (%s).\n",
+					exception_typename.c_str());
+		}
+	}
+
+	static bool is_start_of_trace(const std::string& function) {
+		if (function == "__cxa_throw") {
+			return true;
+		}
+		if (function == "__cxa_rethrow") {
+			return true;
+		}
+		if (function.find("backward::raise")
+				!= std::string::npos) {
+			return true;
+		}
+		if (function.find("backward::raise<")
+				!= std::string::npos) {
+			return true;
+		}
+		if (function.find("pprint_current_exception")
+				!= std::string::npos) {
+			return true;
+		}
+		return false;
+	}
+
+	static void print_stacktrace(StackTrace& st) {
+		typedef std::vector<ResolvedTrace> resolved_traces_t;
+		resolved_traces_t resolved_traces;
+		resolved_traces.reserve(st.size());
+
+		TraceResolver resolver;
+		resolver.load_stacktrace(st);
+		for (size_t i = st.size(); i > 0; --i) {
+			ResolvedTrace trace = resolver.resolve(st[i-1]);
+			// It's really an approximation. We are trying to stop the trace
+			// where the (re)-throw was initiated. In order to get a cleaner
+			// and prettier stack trace.
+			if (is_start_of_trace(trace.object_function)) {
+				break;
+			}
+			for (size_t i = trace.inliners.size(); i > 0; --i) {
+				if (is_start_of_trace(trace.inliners[i-1].function)) {
+					// Here we hack the heck out of the trace!
+					using std::swap;
+					size_t dest_idx = 0;
+					for (dest_idx = 0; i <= trace.inliners.size(); ++dest_idx) {
+						swap(trace.inliners[dest_idx], trace.inliners[i++ -1]);
+					}
+					trace.inliners.resize(dest_idx);
+					trace.source = ResolvedTrace::SourceLoc();
+					break;
+				}
+			}
+			resolved_traces.push_back(trace);
+		}
+		Printer printer;
+		printer.address = true;
+		printer.print(resolved_traces.begin(), resolved_traces.end(), stderr,
+				st.thread_id());
+	}
+
+	static const std::string current_exception_typename() {
+		return details::demangler().demangle(
+				abi::__cxa_current_exception_type()->name()
+				);
+	}
+};
+
+inline void pprint_current_exception() {
+	ExceptionHandling::pprint_current_exception();
+}
+
+#ifdef BACKWARD_ATLEAST_CXX11
+inline void pprint_exception(const std::exception_ptr& e) {
+try {
+		std::rethrow_exception(e);
+	} catch (...) {
+		pprint_current_exception();
+	}
+}
+#endif // BACKWARD_ATLEAST_CXX11
 
 } // namespace backward
 

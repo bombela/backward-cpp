@@ -97,6 +97,8 @@ endforeach()
 # Tests with backward.cpp
 set(TESTS
 	suicide
+	stackoverflow
+	exception
 	)
 
 foreach(test ${TESTS})
