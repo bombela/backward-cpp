@@ -72,7 +72,7 @@
 #if defined(BACKWARD_SYSTEM_LINUX)
 
 // On linux, backtrace can back-trace or "walk" the stack using the following
-// library:
+// libraries:
 //
 // #define BACKWARD_HAS_UNWIND 1
 //  - unwind comes from libgcc, but I saw an equivalent inside clang itself.
@@ -90,6 +90,8 @@
 // The default is:
 // #define BACKWARD_HAS_UNWIND == 1
 //
+// Note that only one of the define should be set to 1 at a time.
+//
 #	if   BACKWARD_HAS_UNWIND == 1
 #	elif BACKWARD_HAS_BACKTRACE == 1
 #	else
@@ -100,7 +102,7 @@
 #	endif
 
 // On linux, backward can extract detailed information about a stack trace
-// using one of the following library:
+// using one of the following libraries:
 //
 // #define BACKWARD_HAS_DW 1
 //  - libdw gives you the most juicy details out of your stack traces:
@@ -133,6 +135,8 @@
 //
 // The default is:
 // #define BACKWARD_HAS_BACKTRACE_SYMBOL == 1
+//
+// Note that only one of the define should be set to 1 at a time.
 //
 #	if   BACKWARD_HAS_DW == 1
 #	elif BACKWARD_HAS_BFD == 1

@@ -54,7 +54,7 @@ function do_action() {
 
 		if [[ $action == "cmake" ]]; then
 			buildtype=$1
-			mkbuild $compiler $lang $buildtype $builddir
+			mkbuild $compiler $lang "$buildtype" "$builddir"
 			[[ $? != 0 ]] && exit
 		elif [[ $action == "make" ]]; then
 			build "$builddir" $@
