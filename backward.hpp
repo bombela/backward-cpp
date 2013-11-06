@@ -33,8 +33,11 @@
 #else
 #	if __cplusplus >= 201103L
 #		define BACKWARD_CXX11
+#		define BACKWARD_ATLEAST_CXX11
+#		define BACKWARD_ATLEAST_CXX98
 #	else
 #		define BACKWARD_CXX98
+#		define BACKWARD_ATLEAST_CXX98
 #	endif
 #endif
 
@@ -200,7 +203,7 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 
 #endif // defined(BACKWARD_SYSTEM_LINUX)
 
-#if   defined(BACKWARD_CXX11)
+#ifdef BACKWARD_ATLEAST_CXX11
 #	include <unordered_map>
 #	include <utility> // for std::swap
 	namespace backward {
@@ -212,7 +215,7 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 		using std::move;
 	} // namespace details
 	} // namespace backward
-#elif defined(BACKWARD_CXX98)
+#else // NOT BACKWARD_ATLEAST_CXX11
 #	include <map>
 	namespace backward {
 	namespace details {
@@ -226,9 +229,7 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 			T& move(T& v) { return v; }
 	} // namespace details
 	} // namespace backward
-#else
-#	error "Mmm if its not C++11 nor C++98... go play in the toaster."
-#endif
+#endif // BACKWARD_ATLEAST_CXX11
 
 namespace backward {
 
@@ -298,7 +299,7 @@ class handle {
 	T    _val;
 	bool _empty;
 
-#if defined(BACKWARD_CXX11)
+#ifdef BACKWARD_ATLEAST_CXX11
 	handle(const handle&) = delete;
 	handle& operator=(const handle&) = delete;
 #endif
@@ -313,7 +314,7 @@ public:
 	explicit handle(): _val(), _empty(true) {}
 	explicit handle(T val): _val(val), _empty(false) {}
 
-#if defined(BACKWARD_CXX11)
+#ifdef BACKWARD_ATLEAST_CXX11
 	handle(handle&& from): _empty(true) {
 		swap(from);
 	}
@@ -1552,7 +1553,7 @@ public:
 		_file.swap(b._file);
 	}
 
-#if defined(BACKWARD_CXX11)
+#ifdef BACKWARD_ATLEAST_CXX11
 	SourceFile(SourceFile&& from): _file(0) {
 		swap(from);
 	}
@@ -1575,7 +1576,7 @@ private:
 		details::default_delete<std::ifstream*>
 			> _file;
 
-#if defined(BACKWARD_CXX11)
+#ifdef BACKWARD_ATLEAST_CXX11
 	SourceFile(const SourceFile&) = delete;
 	SourceFile& operator=(const SourceFile&) = delete;
 #endif
