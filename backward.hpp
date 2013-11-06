@@ -1719,70 +1719,83 @@ public:
 		object(false)
 		{}
 
-	template <typename StackTrace>
-		FILE* print(StackTrace& st, FILE* os = stderr) {
-			using namespace std;
-
+	template <typename ST>
+		FILE* print(ST& st, FILE* os = stderr) {
 			Colorize colorize(os);
 			if (color) {
 				colorize.init();
 			}
-
-			fprintf(os, "Stack trace (most recent call last)");
-			if (st.thread_id()) {
-				fprintf(os, " in thread %u:\n", st.thread_id());
-			} else {
-				fprintf(os, ":\n");
-			}
-
+			print_header(os, st.thread_id());
 			_resolver.load_stacktrace(st);
-			for (unsigned trace_idx = st.size(); trace_idx > 0; --trace_idx) {
-				fprintf(os, "#%-2u", trace_idx);
-				bool already_indented = true;
-				const ResolvedTrace trace = _resolver.resolve(st[trace_idx-1]);
+			for (size_t trace_idx = st.size(); trace_idx > 0; --trace_idx) {
+				print_trace(os, _resolver.resolve(st[trace_idx-1]), colorize);
+			}
+			return os;
+		}
 
-				if (not trace.source.filename.size() or object) {
-					fprintf(os, "   Object \"%s\", at %p, in %s\n",
-							trace.object_filename.c_str(), trace.addr,
-							trace.object_function.c_str());
-					already_indented = false;
-				}
-
-				if (trace.source.filename.size()) {
-					for (size_t inliner_idx = trace.inliners.size();
-							inliner_idx > 0; --inliner_idx) {
-						if (not already_indented) {
-							fprintf(os, "   ");
-						}
-						const ResolvedTrace::SourceLoc& inliner_loc
-							= trace.inliners[inliner_idx-1];
-						print_source_loc(os, " | ", inliner_loc);
-						if (snippet) {
-							print_snippet(os, "    | ", inliner_loc,
-									colorize, Color::purple, 5);
-						}
-						already_indented = false;
-					}
-
-					if (not already_indented) {
-						fprintf(os, "   ");
-					}
-					print_source_loc(os, "   ", trace.source, trace.addr);
-					if (snippet) {
-						print_snippet(os, "      ", trace.source,
-								colorize, Color::yellow, 7);
-					}
-
-					if (trace.locals.size()) {
-						print_locals(os, "      ", trace.locals);
-					}
-				}
+	template <typename IT>
+		FILE* print(IT begin, IT end, FILE* os = stderr, size_t thread_id = 0) {
+			Colorize colorize(os);
+			if (color) {
+				colorize.init();
+			}
+			print_header(os, thread_id);
+			for (; begin != end; ++begin) {
+				print_trace(os, *begin, colorize);
 			}
 			return os;
 		}
 private:
 	TraceResolver  _resolver;
 	SnippetFactory _snippets;
+
+	void print_header(FILE* os, unsigned thread_id) {
+		fprintf(os, "Stack trace (most recent call last)");
+		if (thread_id) {
+			fprintf(os, " in thread %u:\n", thread_id);
+		} else {
+			fprintf(os, ":\n");
+		}
+	}
+
+	void print_trace(FILE* os, const ResolvedTrace& trace,
+			Colorize& colorize) {
+		fprintf(os, "#%-2u", trace.idx);
+		bool already_indented = true;
+
+		if (not trace.source.filename.size() or object) {
+			fprintf(os, "   Object \"%s\", at %p, in %s\n",
+					trace.object_filename.c_str(), trace.addr,
+					trace.object_function.c_str());
+			already_indented = false;
+		}
+
+		for (size_t inliner_idx = trace.inliners.size();
+				inliner_idx > 0; --inliner_idx) {
+			if (not already_indented) {
+				fprintf(os, "   ");
+			}
+			const ResolvedTrace::SourceLoc& inliner_loc
+				= trace.inliners[inliner_idx-1];
+			print_source_loc(os, " | ", inliner_loc);
+			if (snippet) {
+				print_snippet(os, "    | ", inliner_loc,
+						colorize, Color::purple, 5);
+			}
+			already_indented = false;
+		}
+
+		if (trace.source.filename.size()) {
+			if (not already_indented) {
+				fprintf(os, "   ");
+			}
+			print_source_loc(os, "   ", trace.source, trace.addr);
+			if (snippet) {
+				print_snippet(os, "      ", trace.source,
+						colorize, Color::yellow, 7);
+			}
+		}
+	}
 
 	void print_snippet(FILE* os, const char* indent,
 			const ResolvedTrace::SourceLoc& source_loc,
