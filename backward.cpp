@@ -28,5 +28,6 @@
 namespace backward {
 
 backward::InstallSignalHandling sh;
+backward::ExceptionHandling eh;
 
 } // namespace backward
