@@ -1,5 +1,5 @@
 /*
- * test/invalidread2.cpp
+ * test/rectrace.cpp
  * Copyright 2013 Google Inc. All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,21 +22,78 @@
  */
 
 #include "backward.hpp"
-
 #include <stdio.h>
 #include "test/test.hpp"
 
 using namespace backward;
 
-int you_shall_not_pass()
-{
-	char* ptr = (char*)42;
-	int v = *ptr;
-	return v;
+typedef StackTrace stacktrace_t;
+
+void end_of_our_journey(stacktrace_t& st) {
+	if (not st.size()) {
+		st.load_here();
+	}
 }
 
-TEST_SEGFAULT(invalid_read2)
-{
-	int v = you_shall_not_pass();
-	std::cout << "v=" << v << std::endl;
+int rec(stacktrace_t& st, int level) {
+	if (level <= 1) {
+		end_of_our_journey(st);
+		return 0;
+	}
+	return rec(st, level - 1);
+}
+
+namespace toto {
+
+namespace titi {
+
+	struct foo {
+
+		union bar {
+			__attribute__((noinline))
+			static int trampoline(stacktrace_t& st, int level) {
+				return rec(st, level);
+			}
+		};
+ };
+
+} // namespace titi
+
+} // namespace toto
+
+TEST (recursion) {
+	{ // lexical scope.
+		stacktrace_t st;
+		const int input = 3;
+		int r = toto::titi::foo::bar::trampoline(st, input);
+
+		std::cout << "rec(" << input << ") == " << r << std::endl;
+
+		Printer printer;
+		//    printer.address = true;
+		printer.object = true;
+		printer.print(st, stdout);
+	}
+}
+
+int fib(StackTrace& st, int level) {
+	if (level == 2) {
+		return 1;
+	}
+	if (level <= 1) {
+		end_of_our_journey(st);
+		return 0;
+	}
+	return fib(st, level - 1) + fib(st, level - 2);
+}
+
+TEST (fibrecursive) {
+	StackTrace st;
+	const int input = 6;
+	int r = fib(st, input);
+
+	std::cout << "fib(" << input << ") == " << r << std::endl;
+
+	Printer printer;
+	printer.print(st, stdout);
 }

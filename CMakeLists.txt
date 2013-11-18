@@ -85,14 +85,8 @@ endmacro()
 # Tests without backward.cpp
 set(TESTS
 	test
-	minitrace
-	smalltrace
-	simplerecursive
-	fib
-	segfault
-	invalidread
-	suicide
-	divbyzero
+	stacktrace	
+	rectrace	
 	select_signals
 	)
 
@@ -102,7 +96,7 @@ endforeach()
 
 # Tests with backward.cpp
 set(TESTS
-	invalidread2
+	suicide
 	)
 
 foreach(test ${TESTS})

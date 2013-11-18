@@ -1,5 +1,5 @@
 /*
- * test/smalltrace.cpp
+ * test/stacktrace.cpp
  * Copyright 2013 Google Inc. All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,35 +22,41 @@
  */
 
 #include "backward.hpp"
-
-#include <stdio.h>
+#include <cstdio>
 #include "test/test.hpp"
 
 using namespace backward;
 
-void d(StackTrace& st)
-{
+void collect_trace(StackTrace& st) {
 	st.load_here();
 }
 
-void c(StackTrace& st)
-{
+TEST (minitrace) {
+	StackTrace st;
+	collect_trace(st);
+
+	Printer printer;
+	printer.print(st, stdout);
+}
+
+void d(StackTrace& st) {
+	st.load_here();
+}
+
+void c(StackTrace& st) {
 	return d(st);
 }
 
-void b(StackTrace& st)
-{
+void b(StackTrace& st) {
 	return c(st);
 }
 
 __attribute__ ((noinline))
-void a(StackTrace& st)
-{
+void a(StackTrace& st) {
 	return b(st);
 }
 
-TEST (smalltrace)
-{
+TEST (smalltrace) {
 	StackTrace st;
 	a(st);
 

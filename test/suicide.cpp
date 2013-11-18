@@ -21,10 +21,6 @@
  * SOFTWARE.
  */
 
-//#define BACKWARD_SYSTEN_UNKNOWN
-//#define BACKWARD_HAS_UNWIND 0
-//#define BACKWARD_CXX98
-
 #include "backward.hpp"
 
 #include <stdio.h>
@@ -32,15 +28,52 @@
 
 using namespace backward;
 
+void badass_function()
+{
+	char* ptr = (char*)42;
+	*ptr = 42;
+}
+
+TEST_SEGFAULT (invalid_write)
+{
+	badass_function();
+}
+
+int you_shall_not_pass()
+{
+	char* ptr = (char*)42;
+	int v = *ptr;
+	return v;
+}
+
+TEST_SEGFAULT(invalid_read)
+{
+	int v = you_shall_not_pass();
+	std::cout << "v=" << v << std::endl;
+}
+
 void abort_abort_I_repeat_abort_abort()
 {
 	std::cout << "Jumping off the boat!" << std::endl;
 	abort();
 }
 
-TEST_ABORT (invalid_read)
+TEST_ABORT (calling_abort)
 {
-	SignalHandling sh;
-	std::cout << std::boolalpha << "sh.loaded() == " << sh.loaded() << std::endl;
 	abort_abort_I_repeat_abort_abort();
+}
+
+volatile int zero = 0;
+
+int divide_by_zero()
+{
+	std::cout << "And the wild black hole appears..." << std::endl;
+	int v = 42 / zero;
+	return v;
+}
+
+TEST_DIVZERO (divide_by_zero)
+{
+	int v = divide_by_zero();
+	std::cout << "v=" << v << std::endl;
 }
