@@ -21,17 +21,6 @@
  * SOFTWARE.
  */
 
-//#define BACKWARD_SYSTEM_UNKNOWN
-
-//#define BACKWARD_HAS_UNWIND 1
-//#define BACKWARD_HAS_BACKTRACE 1
-
-//#define BACKWARD_HAS_DW 1
-//#define BACKWARD_HAS_BFD 1
-//#define BACKWARD_HAS_BACKTRACE_SYMBOL 1
-
-//#define BACKWARD_CXX98
-
 #include "backward.hpp"
 
 #include <stdio.h>
@@ -46,7 +35,7 @@ int you_shall_not_pass()
 	return v;
 }
 
-TEST (invalid_read)
+TEST_SEGFAULT (invalid_read)
 {
 	SignalHandling sh;
 	std::cout << std::boolalpha << "sh.loaded() == " << sh.loaded() << std::endl;

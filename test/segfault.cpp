@@ -21,10 +21,6 @@
  * SOFTWARE.
  */
 
-//#define BACKWARD_SYSTEN_UNKNOWN
-//#define BACKWARD_HAS_UNWIND 0
-//#define BACKWARD_CXX98
-
 #include "backward.hpp"
 
 #include <stdio.h>
@@ -38,7 +34,7 @@ void badass_function()
 	*ptr = 42;
 }
 
-TEST (invalid_write)
+TEST_SEGFAULT (invalid_write)
 {
 	SignalHandling sh;
 	std::cout << std::boolalpha << "sh.loaded() == " << sh.loaded() << std::endl;

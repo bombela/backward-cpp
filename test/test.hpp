@@ -35,6 +35,8 @@
 namespace test {
 
 struct AssertFailedError: std::exception {
+	~AssertFailedError() throw() {}
+
 	AssertFailedError(const char* filename, int line, const char* errmsg):
 		basename(_basename(filename)), line(line), errmsg(errmsg) {}
 
@@ -72,6 +74,7 @@ enum TestStatus {
 		SIGNAL_UNCAUGHT     = FAILED | 3<<1,
 			SIGNAL_SEGFAULT = SIGNAL_UNCAUGHT | 1<<3,
 			SIGNAL_ABORT    = SIGNAL_UNCAUGHT | 2<<3,
+			SIGNAL_DIVZERO  = SIGNAL_UNCAUGHT | 2<<3,
 
 	STATUS_MASK = 0x1F
 };
@@ -124,6 +127,7 @@ TestBase::TestBase(const char* n, TestStatus s): name(n), expected_status(s) {
 #define TEST_UNCAUGHT_SIGNAL(name) _TEST_STATUS(name, ::test::SIGNAL_UNCAUGHT)
 #define TEST_SEGFAULT(name) _TEST_STATUS(name, ::test::SIGNAL_SEGFAULT)
 #define TEST_ABORT(name) _TEST_STATUS(name, ::test::SIGNAL_ABORT)
+#define TEST_DIVZERO(name) _TEST_STATUS(name, ::test::SIGNAL_DIVZERO)
 
 #define ASSERT(expr) \
 	(expr) ? static_cast<void>(0) \

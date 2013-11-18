@@ -85,7 +85,6 @@ endmacro()
 # Tests without backward.cpp
 set(TESTS
 	test
-	compile
 	minitrace
 	smalltrace
 	simplerecursive

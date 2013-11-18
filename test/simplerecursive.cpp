@@ -21,13 +21,6 @@
  * SOFTWARE.
  */
 
-//#define BACKWARD_HAS_UNWIND 1
-//#define BACKWARD_SYSTEN_UNKNOWN
-#define BACKWARD_HAS_DW 1
-//#define BACKWARD_HAS_BFD 1
-//#define BACKWARD_HAS_BACKTRACE_SYMBOL 1
-//#define BACKWARD_HAS_BACKTRACE 1
-//#define BACKWARD_CXX98
 #include "backward.hpp"
 #include <stdio.h>
 #include "test/test.hpp"

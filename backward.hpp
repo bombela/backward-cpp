@@ -1902,13 +1902,17 @@ public:
 
 		for (size_t i = 0; i < signals.size(); ++i) {
 			struct sigaction action;
-			action.sa_flags = SA_SIGINFO | SA_ONSTACK;
-			sigemptyset(&action.sa_mask);
+			memset(&action, 0, sizeof action);
+			action.sa_flags = (SA_SIGINFO | SA_ONSTACK | SA_NODEFER |
+					SA_RESETHAND);
+			sigfillset(&action.sa_mask);
+			sigdelset(&action.sa_mask, signals[i]);
 			action.sa_sigaction = &sig_handler;
 
 			int r = sigaction(signals[i], &action, 0);
 			if (r < 0) success = false;
 		}
+
 		_loaded = success;
 	}
 
@@ -1941,7 +1945,12 @@ private:
 		printer.print(st, stderr);
 
 		psiginfo(info, 0);
+
+		// try to forward the signal.
+		raise(info->si_signo);
+
 		// terminate the process immediately.
+		puts("watf? exit");
 		_exit(EXIT_FAILURE);
 	}
 };

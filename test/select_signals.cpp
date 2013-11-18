@@ -21,10 +21,6 @@
  * SOFTWARE.
  */
 
-//#define BACKWARD_SYSTEN_UNKNOWN
-//#define BACKWARD_HAS_UNWIND 0
-//#define BACKWARD_CXX98
-
 #include "backward.hpp"
 
 #include <stdio.h>
@@ -32,17 +28,15 @@
 
 using namespace backward;
 
-void badass_function()
-{
+void badass_function() {
 	char* ptr = (char*)42;
 	*ptr = 42;
 }
 
-TEST (select_signals)
-{
-  std::vector<int> signals;
-  signals.push_back(SIGSEGV);
-  SignalHandling sh(signals);
+TEST_SEGFAULT (select_signals) {
+	std::vector<int> signals;
+	signals.push_back(SIGSEGV);
+	SignalHandling sh(signals);
 	std::cout << std::boolalpha << "sh.loaded() == " << sh.loaded() << std::endl;
 	badass_function();
 }

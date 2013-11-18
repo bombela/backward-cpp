@@ -38,7 +38,7 @@ void abort_abort_I_repeat_abort_abort()
 	abort();
 }
 
-TEST (invalid_read)
+TEST_ABORT (invalid_read)
 {
 	SignalHandling sh;
 	std::cout << std::boolalpha << "sh.loaded() == " << sh.loaded() << std::endl;

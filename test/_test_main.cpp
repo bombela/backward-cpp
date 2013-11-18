@@ -31,7 +31,7 @@
 test::test_registry_t test::test_registry;
 using namespace test;
 
-bool run_test(TestBase::TestBase& test) {
+bool run_test(TestBase& test) {
 	printf("-- running test case: %s\n", test.name);
 
 	fflush(stdout);
@@ -64,6 +64,8 @@ bool run_test(TestBase::TestBase& test) {
 			case SIGSEGV:
 			case SIGBUS:
 				status = test::SIGNAL_SEGFAULT; break;
+			case SIGFPE:
+				status = test::SIGNAL_DIVZERO; break;
 			default:
 				status = test::SIGNAL_UNCAUGHT;
 		}
@@ -79,7 +81,6 @@ bool run_test(TestBase::TestBase& test) {
 		return (status & test::SIGNAL_UNCAUGHT);
 	}
 
-	printf("__> %d %d\n", status, test.expected_status);
 	return status == test.expected_status;
 }
 
@@ -89,7 +90,7 @@ int main(int argc, const char* const argv[]) {
 	size_t total_cnt = 0;
 	for (test_registry_t::iterator it = test_registry.begin();
 			it != test_registry.end(); ++it) {
-		TestBase::TestBase& test = **it;
+		TestBase& test = **it;
 
 		bool consider_test = (argc <= 1);
 		for (int i = 1; i < argc; ++i) {
