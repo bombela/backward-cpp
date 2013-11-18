@@ -22,25 +22,99 @@
  */
 
 #include "test.hpp"
-#include <stdio.h>
+#include <cstdio>
+#include <cstdlib>
+#include <error.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 test::test_registry_t test::test_registry;
 using namespace test;
 
-int main()
-{
-	size_t failed_test_cnt = 0;
-	for (test_registry_t::iterator test = test_registry.begin();
-			test != test_registry.end(); ++test) {
-		printf("-- running test case: %s\n", (*test)->name);
-		const bool success = (*test)->run();
-		if (not success) {
-			printf("\n-- test case failed: %s\n", (*test)->name);
-			failed_test_cnt += 1;
+bool run_test(TestBase::TestBase& test) {
+	printf("-- running test case: %s\n", test.name);
+
+	fflush(stdout);
+	pid_t child_pid = fork();
+	if (child_pid == 0) {
+		exit(static_cast<int>(test.run()));
+	}
+	if (child_pid == -1) {
+		error(EXIT_FAILURE, 0, "unable to fork");
+	}
+
+	int child_status = 0;
+	waitpid(child_pid, &child_status, 0);
+
+	test::TestStatus status;
+
+	if (WIFEXITED(child_status)) {
+		int exit_status = WEXITSTATUS(child_status);
+		if (exit_status & ~test::STATUS_MASK) {
+			status = test::FAILED;
 		} else {
-			printf("\n-- test case success: %s\n", (*test)->name);
+			status = static_cast<test::TestStatus>(exit_status);
+		}
+	} else if (WIFSIGNALED(child_status)) {
+		const int signum = WTERMSIG(child_status);
+		printf("!! signal (%d) %s\n", signum, strsignal(signum));
+		switch (signum) {
+			case SIGABRT:
+				status = test::SIGNAL_ABORT; break;
+			case SIGSEGV:
+			case SIGBUS:
+				status = test::SIGNAL_SEGFAULT; break;
+			default:
+				status = test::SIGNAL_UNCAUGHT;
+		}
+	} else {
+		status = test::SUCCESS;
+	}
+
+	if (test.expected_status == test::FAILED) {
+		return (status & test::FAILED);
+	}
+
+	if (test.expected_status == test::SIGNAL_UNCAUGHT) {
+		return (status & test::SIGNAL_UNCAUGHT);
+	}
+
+	printf("__> %d %d\n", status, test.expected_status);
+	return status == test.expected_status;
+}
+
+int main(int argc, const char* const argv[]) {
+
+	size_t success_cnt = 0;
+	size_t total_cnt = 0;
+	for (test_registry_t::iterator it = test_registry.begin();
+			it != test_registry.end(); ++it) {
+		TestBase::TestBase& test = **it;
+
+		bool consider_test = (argc <= 1);
+		for (int i = 1; i < argc; ++i) {
+			if (strcasecmp(argv[i], test.name) == 0) {
+				consider_test = true;
+				break;
+			}
+		}
+		if (not consider_test) {
+			continue;
+		}
+
+		total_cnt += 1;
+		if (run_test(test)) {
+			printf("-- test case success: %s\n", test.name);
+			success_cnt += 1;
+		} else {
+			printf("** test case FAILED : %s\n", test.name);
 		}
 	}
-	//printf("-- %zi/%zi test(s) case failed\n", failed_test_cnt, test_registry.size());
-	return failed_test_cnt != 0;
+	printf("-- tests passing: %lu/%lu", success_cnt, total_cnt);
+	if (total_cnt) {
+		printf(" (%lu%%)\n", success_cnt * 100 / total_cnt);
+	} else {
+		printf("\n");
+	}
+	return (success_cnt == total_cnt) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

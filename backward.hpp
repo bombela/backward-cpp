@@ -1882,7 +1882,8 @@ public:
         return std::vector<int>(signals, signals + sizeof signals);
    }
 
-  SignalHandling(const std::vector<int>& signals = make_default_signals()) : _loaded(false) { 
+  SignalHandling(const std::vector<int>& signals = make_default_signals()):
+	  _loaded(false) {
 		bool success = true;
 
 		const size_t stack_size = 1024 * 1024 * 8;

@@ -79,11 +79,12 @@ macro(backward_add_test src src_dep)
 		COMPILE_DEFINITIONS "${BACKWARD_DEFINITIONS}")
 
 	target_link_libraries(${test_name} dw bfd dl test_main)
-	add_test(${test_name} ${test_name})
+	add_test(NAME ${name} COMMAND ${test_name})
 endmacro()
 
 # Tests without backward.cpp
 set(TESTS
+	test
 	compile
 	minitrace
 	smalltrace
