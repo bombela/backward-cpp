@@ -36,15 +36,13 @@ void badass_function() {
 TEST_SEGFAULT (pprint_sigsev) {
 	std::vector<int> signals;
 	signals.push_back(SIGSEGV);
-	SignalHandling sh(signals);
-	std::cout << std::boolalpha << "sh.loaded() == " << sh.loaded() << std::endl;
+	ScopedSignalHandling sh(signals);
 	badass_function();
 }
 
 TEST_SEGFAULT (wont_pprint) {
 	std::vector<int> signals;
 	signals.push_back(SIGABRT);
-	SignalHandling sh(signals);
-	std::cout << std::boolalpha << "sh.loaded() == " << sh.loaded() << std::endl;
+	ScopedSignalHandling sh(signals);
 	badass_function();
 }

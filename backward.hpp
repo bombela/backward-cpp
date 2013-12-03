@@ -1846,81 +1846,103 @@ private:
 
 #ifdef BACKWARD_SYSTEM_LINUX
 
-
 class SignalHandling {
 public:
-   static std::vector<int> make_default_signals() {
-       const int signals[] = {
-		// default action: Core
-		SIGILL,
-		SIGABRT,
-		SIGFPE,
-		SIGSEGV,
-		SIGBUS,
-		// I am not sure the following signals should be enabled by
-		// default:
-		// default action: Term
-		SIGHUP,
-		SIGINT,
-		SIGPIPE,
-		SIGALRM,
-		SIGTERM,
-		SIGUSR1,
-		SIGUSR2,
-		SIGPOLL,
-		SIGPROF,
-		SIGVTALRM,
-		SIGIO,
-		SIGPWR,
-		// default action: Core
-		SIGQUIT,
-		SIGSYS,
-		SIGTRAP,
-		SIGXCPU,
-		SIGXFSZ
-	};
-        return std::vector<int>(signals, signals + sizeof signals);
-   }
+	typedef std::vector<int> signals_t;
 
-  SignalHandling(const std::vector<int>& signals = make_default_signals()):
-	  _loaded(false) {
+	static SignalHandling& instance() {
+		static SignalHandling instance;
+		return instance;
+	}
+
+	static signals_t default_signals() {
+		const int signals[] = {
+			// default action: Core
+			SIGILL,
+			SIGABRT,
+			SIGFPE,
+			SIGSEGV,
+			SIGBUS,
+			// Not sure if the following should be enabled by default:
+			// default action: Term
+			SIGHUP,
+			SIGINT,
+			SIGPIPE,
+			SIGALRM,
+			SIGTERM,
+			SIGUSR1,
+			SIGUSR2,
+			SIGPOLL,
+			SIGPROF,
+			SIGVTALRM,
+			SIGIO,
+			SIGPWR,
+			// default action: Core
+			SIGQUIT,
+			SIGSYS,
+			SIGTRAP,
+			SIGXCPU,
+			SIGXFSZ
+		};
+		return std::vector<int>(signals, signals + sizeof signals);
+	}
+
+	bool loaded() const { return _loaded; }
+
+	bool set(const signals_t& signals, bool enable) {
+		if (not loaded()) return false;
+
 		bool success = true;
 
-		const size_t stack_size = 1024 * 1024 * 8;
+		for (size_t i = 0; i < signals.size(); ++i) {
+			struct sigaction action;
+			memset(&action, 0, sizeof action);
+			if (enable) {
+				action.sa_flags = (SA_SIGINFO | SA_ONSTACK | SA_NODEFER |
+						SA_RESETHAND);
+				sigfillset(&action.sa_mask);
+				sigdelset(&action.sa_mask, signals[i]);
+				action.sa_sigaction = &sig_handler;
+			} else {
+				action.sa_handler = SIG_DFL;
+			}
+
+			const int r = sigaction(signals[i], &action, 0);
+			if (r < 0) {
+				success = false;
+			} else if (signals[i] == SIGABRT) {
+				_sigabrt = enable;
+			}
+		}
+		return success;
+	}
+
+	void abort() {
+		if (_sigabrt) {
+			set(signals_t(1, SIGABRT), false);
+		}
+		::abort();
+	}
+
+private:
+	bool                   _loaded;
+	bool                   _sigabrt;
+	details::handle<char*> _stack_content;
+
+	~SignalHandling() {}
+	SignalHandling(): _loaded(false), _sigabrt(false) {
+		const size_t stack_size = 1024 * 1024 * 8;  // 8 mbytes.
 		_stack_content.reset((char*)malloc(stack_size));
 		if (_stack_content) {
 			stack_t ss;
 			ss.ss_sp = _stack_content.get();
 			ss.ss_size = stack_size;
 			ss.ss_flags = 0;
-			if (sigaltstack(&ss, 0) < 0) {
-				success = false;
+			if (sigaltstack(&ss, 0) >= 0) {
+				_loaded = true;
 			}
-		} else {
-			success = false;
 		}
-
-		for (size_t i = 0; i < signals.size(); ++i) {
-			struct sigaction action;
-			memset(&action, 0, sizeof action);
-			action.sa_flags = (SA_SIGINFO | SA_ONSTACK | SA_NODEFER |
-					SA_RESETHAND);
-			sigfillset(&action.sa_mask);
-			sigdelset(&action.sa_mask, signals[i]);
-			action.sa_sigaction = &sig_handler;
-
-			int r = sigaction(signals[i], &action, 0);
-			if (r < 0) success = false;
-		}
-
-		_loaded = success;
 	}
-
-	bool loaded() const { return _loaded; }
-
-private:
-	details::handle<char*> _stack_content;
-	bool                   _loaded;
 
 	static void sig_handler(int, siginfo_t* info, void* _ctx) {
 		ucontext_t *uctx = (ucontext_t*) _ctx;
@@ -1946,11 +1968,12 @@ private:
 
 		psiginfo(info, 0);
 
-		// try to forward the signal.
+		// raise the signal again from itself (sigaction was configured to
+		// reset to the default signal after the first invocation and to allow
+		// recursive call of the same signal).
 		raise(info->si_signo);
 
 		// terminate the process immediately.
-		puts("watf? exit");
 		_exit(EXIT_FAILURE);
 	}
 };
@@ -1961,11 +1984,64 @@ private:
 
 class SignalHandling {
 public:
-	SignalHandling(const std::vector<int>& = std::vector<int>()) {}
-	bool init() { return false; }
+	typedef int signals_t;
+	SignalHandling& instance() {
+		static SignalHandling instance;
+		return instance;
+	}
+	static signals_t default_signals() { return signals_t(); }
+
+	bool loaded() const { return false; }
+	bool set(const signals_t&, bool) { return false; }
+	void abort() const { ::abort(); }
+
+private:
+	~SignalHandling() {}
+	SignalHandling() {}
 };
 
 #endif // BACKWARD_SYSTEM_UNKNOWN
+
+class InstallSignalHandling {
+public:
+	typedef SignalHandling::signals_t signals_t;
+
+	InstallSignalHandling() {
+		SignalHandling::instance().set(
+				SignalHandling::instance().default_signals(), true);
+	}
+	InstallSignalHandling(const signals_t& signals) {
+		SignalHandling::instance().set(signals, true);
+	}
+};
+
+class ScopedSignalHandling {
+public:
+	typedef SignalHandling::signals_t signals_t;
+
+	ScopedSignalHandling():
+		_signals(SignalHandling::instance().default_signals()) {
+		SignalHandling::instance().set(_signals, true);
+	}
+	ScopedSignalHandling(const signals_t& signals):
+		_signals(signals) {
+		SignalHandling::instance().set(_signals, true);
+	}
+	~ScopedSignalHandling() {
+		SignalHandling::instance().set(_signals, false);
+	}
+#ifdef BACKWARD_ATLEAST_CXX11
+	ScopedSignalHandling(const ScopedSignalHandling&) = delete;
+	ScopedSignalHandling& operator=(ScopedSignalHandling) = delete;
+#endif
+private:
+	const signals_t _signals;
+
+#ifndef BACKWARD_ATLEAST_CXX11
+	ScopedSignalHandling(const ScopedSignalHandling&);
+	ScopedSignalHandling& operator=(ScopedSignalHandling);
+#endif
+};
 
 } // namespace backward
 
