@@ -23,6 +23,7 @@
 
 #include "test.hpp"
 #include <cstdio>
+#include <map>
 #include <cstdlib>
 #include <error.h>
 #include <unistd.h>
@@ -30,6 +31,20 @@
 
 test::test_registry_t test::test_registry;
 using namespace test;
+
+const char* TestStatus_str(TestStatus e) {
+	switch (e) {
+		case SUCCESS: return "SUCCESS";
+		case FAILED: return "FAILED";
+		case ASSERT_FAIL: return "ASSERT_FAIL";
+		case EXCEPTION_UNCAUGHT: return "EXCEPTION_UNCAUGHT";
+		case SIGNAL_UNCAUGHT: return "SIGNAL_UNCAUGHT";
+		case SIGNAL_SEGFAULT: return "SIGNAL_SEGFAULT";
+		case SIGNAL_ABORT: return "SIGNAL_ABORT";
+		case SIGNAL_DIVZERO: return "SIGNAL_DIVZERO";
+	};
+	abort();
+}
 
 bool run_test(TestBase& test) {
 	printf("-- running test case: %s\n", test.name);
@@ -73,15 +88,25 @@ bool run_test(TestBase& test) {
 		status = test::SUCCESS;
 	}
 
+
+	bool success = true;
+
 	if (test.expected_status == test::FAILED) {
-		return (status & test::FAILED);
+		success = (status & test::FAILED);
+	} else if (test.expected_status == test::SIGNAL_UNCAUGHT) {
+		success = (status & test::SIGNAL_UNCAUGHT);
+	} else {
+		success = (status == test.expected_status);
 	}
 
-	if (test.expected_status == test::SIGNAL_UNCAUGHT) {
-		return (status & test::SIGNAL_UNCAUGHT);
+	if (success) {
+		printf("-- test case success: %s\n", test.name);
+	} else {
+		printf("** status(%s) != expected(%s), test case failed: %s\n",
+				TestStatus_str(status), TestStatus_str(test.expected_status),
+				test.name);
 	}
-
-	return status == test.expected_status;
+	return success;
 }
 
 int main(int argc, const char* const argv[]) {
@@ -105,10 +130,7 @@ int main(int argc, const char* const argv[]) {
 
 		total_cnt += 1;
 		if (run_test(test)) {
-			printf("-- test case success: %s\n", test.name);
 			success_cnt += 1;
-		} else {
-			printf("** test case FAILED : %s\n", test.name);
 		}
 	}
 	printf("-- tests passing: %lu/%lu", success_cnt, total_cnt);

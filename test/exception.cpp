@@ -43,7 +43,6 @@ TEST_UNCAUGHT_EXCEPTION(uncaught) {
 }
 
 void another_sub_function() {
-    //throw std::runtime_error("OmyGAAAD! Exception!");
 	backward::raise(std::runtime_error("OmyGAAAD! Exception!"));
 }
 
@@ -51,7 +50,6 @@ void a_sub_function() {
 	try {
 		another_sub_function();
 	} catch (...) {
-//        ExceptionHandling::pprint_current_exception();
 		throw;
 	}
 }
@@ -60,49 +58,106 @@ void a_little_function() {
 	try {
 		a_sub_function();
 	} catch (...) {
-//        ExceptionHandling::pprint_current_exception();
 		throw;
 	}
 }
 
-TEST_UNCAUGHT_EXCEPTION(rethrow) {
-//    try {
+TEST(rethrow) {
+	try {
 		a_little_function();
-//    } catch (const std::exception& e) {
-//        ExceptionHandling::pprint_current_exception();
-//    }
+	} catch (const std::exception& e) {
+		ExceptionHandling::pprint_current_exception();
+	}
 }
 
 #ifdef BACKWARD_ATLEAST_CXX11
 
-void nested_level2() {
+void nested_level3() {
 	throw std::runtime_error("OmyGAAAD! Exception!");
+}
+
+void nested_level2() {
+	try {
+		nested_level3();
+	} catch (std::exception& e) {
+		std::throw_with_nested(std::runtime_error("level1!"));
+	}
 }
 
 void nested_level1() {
 	try {
 		nested_level2();
 	} catch (std::exception& e) {
-		std::throw_with_nested(std::runtime_error("vas y prend ca"));
+		std::throw_with_nested(std::runtime_error("and level two"));
 	}
 }
 
-void print_ex(std::exception& e, int level=0) {
+static int max_nested_level = 0;
+
+void print_nested_ex(std::exception& e, int level=0) {
 	std::cout << std::string(level, ' ')
-		<< "exception: " << e.what() << std::endl;
+		<< " - exception: " << e.what() << std::endl;
+	max_nested_level = std::max(max_nested_level, level);
 	try {
 		std::rethrow_if_nested(e);
 	} catch (std::exception& e) {
-		print_ex(e, 1);
+		print_nested_ex(e, level + 1);
 	}
 }
 
 TEST(nested) {
 	try {
-		a_little_function();
+		nested_level1();
 	} catch (std::exception& e) {
-		print_ex(e);
+		print_nested_ex(e);
+	}
+	ASSERT_EQ(max_nested_level, 2);
+}
+
+void nested_2_level3() {
+	backward::raise(std::runtime_error("OmyGAAAD! Exception!"));
+}
+
+void nested_2_level2() {
+	try {
+		nested_2_level3();
+	} catch (std::exception& e) {
+		std::throw_with_nested(std::runtime_error("level1!"));
 	}
 }
 
+void nested_2_level1() {
+	try {
+		nested_2_level2();
+	} catch (std::exception& e) {
+		std::throw_with_nested(std::runtime_error("and level two"));
+	}
+}
+
+static int max_nested_2_level = 0;
+
+void print_nested_2_ex(std::exception& e, int level=0) {
+	std::cout << std::string(level, ' ')
+		<< " - exception: " << e.what() << std::endl;
+	max_nested_2_level = std::max(max_nested_2_level, level);
+	try {
+		std::rethrow_if_nested(e);
+	} catch (std::exception& e) {
+		print_nested_2_ex(e, level + 1);
+	}
+}
+
+TEST(nested2) {
+	try {
+		nested_2_level1();
+	} catch (std::exception& e) {
+		print_nested_2_ex(e);
+	}
+	ASSERT_EQ(max_nested_2_level, 2);
+}
+
 #endif
+
+TEST(not_pprint_current_exception) {
+	backward::pprint_current_exception();
+}

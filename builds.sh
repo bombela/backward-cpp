@@ -40,7 +40,7 @@ function build() {
 function dotest() {
 	local builddir=$1
 	shift
-	make -C "$builddir" test $@
+	(cd "$builddir" && ctest $@)
 	return 0
 }
 

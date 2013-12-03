@@ -2087,16 +2087,24 @@ public:
 private:
 	static void terminate_handler() {
 		pprint_current_exception();
-		exit(EXIT_FAILURE);
+		SignalHandling::instance().abort();
+		abort();
 	}
 
 	static void print_exception(StackTrace* st = 0) {
-		const std::string exception_typename = details::demangler().demangle(
-				abi::__cxa_current_exception_type()->name());
+		const std::type_info* current_exception =
+			abi::__cxa_current_exception_type();
+		if (not current_exception) {
+			return;
+		}
+		const std::string exception_typename =
+			details::demangler().demangle(current_exception->name());
+		if (st) {
+			print_stacktrace(*st);
+		}
 		try {
 			throw; // rethrow whatever we have got.
 		} catch (exception_with_st& e) {
-			if (st) print_stacktrace(*st);
 			fprintf(stderr, "Exception originally thrown from:\n");
 			print_stacktrace(e.stacktrace());
 			try {
@@ -2105,11 +2113,9 @@ private:
 				print_exception();
 			}
 		} catch (const std::exception& e) {
-			if (st) print_stacktrace(*st);
 			fprintf(stderr, "Exception (%s): %s\n",
 					exception_typename.c_str(), e.what());
 		} catch (...) {
-			if (st) print_stacktrace(*st);
 			fprintf(stderr, "Exception (%s).\n",
 					exception_typename.c_str());
 		}

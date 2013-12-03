@@ -29,6 +29,7 @@ project(backward CXX)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_COMPILER_IS_GNUCXX)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic-errors")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=switch")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 endif()
 
@@ -97,7 +98,6 @@ endforeach()
 # Tests with backward.cpp
 set(TESTS
 	suicide
-	stackoverflow
 	exception
 	)
 

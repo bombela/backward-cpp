@@ -74,7 +74,7 @@ enum TestStatus {
 		SIGNAL_UNCAUGHT     = FAILED | 3<<1,
 			SIGNAL_SEGFAULT = SIGNAL_UNCAUGHT | 1<<3,
 			SIGNAL_ABORT    = SIGNAL_UNCAUGHT | 2<<3,
-			SIGNAL_DIVZERO  = SIGNAL_UNCAUGHT | 2<<3,
+			SIGNAL_DIVZERO  = SIGNAL_UNCAUGHT | 3<<3,
 
 	STATUS_MASK = 0x1F
 };
@@ -82,24 +82,35 @@ enum TestStatus {
 struct TestBase {
 	const char* name;
 	TestStatus expected_status;
+	bool custom_terminate_handler;
 
 	virtual ~TestBase() {}
-	TestBase(const char*, TestStatus);
+	TestBase(const char*, TestStatus, bool);
 	virtual void do_test() = 0;
 
 	TestStatus run() {
-		try {
-			do_test();
-			return SUCCESS;
-		} catch(const AssertFailedError& e) {
-			printf("!! %s\n", e.what());
-			return ASSERT_FAIL;
-		} catch(const std::exception& e) {
-			printf("!! exception: %s\n", e.what());
-			return  EXCEPTION_UNCAUGHT;
-		} catch(...) {
-			printf("!! unknown exception\n");
-			return  EXCEPTION_UNCAUGHT;
+		if (custom_terminate_handler) {
+			try {
+				do_test();
+				return SUCCESS;
+			} catch(const AssertFailedError& e) {
+				printf("!! %s\n", e.what());
+				return ASSERT_FAIL;
+			}
+		} else {
+			try {
+				do_test();
+				return SUCCESS;
+			} catch(const AssertFailedError& e) {
+				printf("!! %s\n", e.what());
+				return ASSERT_FAIL;
+			} catch(const std::exception& e) {
+				printf("!! exception: %s\n", e.what());
+				return  EXCEPTION_UNCAUGHT;
+			} catch(...) {
+				printf("!! unknown exception\n");
+				return  EXCEPTION_UNCAUGHT;
+			}
 		}
 	}
 };
@@ -107,18 +118,22 @@ struct TestBase {
 typedef std::vector<TestBase*> test_registry_t;
 extern test_registry_t test_registry;
 
-TestBase::TestBase(const char* n, TestStatus s): name(n), expected_status(s) {
+TestBase::TestBase(const char* n, TestStatus s, bool cth):
+	name(n), expected_status(s), custom_terminate_handler(cth) {
 	test_registry.push_back(this);
 }
 
 } // namespace test
 
-#define _TEST_STATUS(name, status) \
+#define _TEST_STATUS_DEF(name, status, igne) \
 	struct TEST_##name: ::test::TestBase { \
-		TEST_##name(): TestBase(#name, status) {} \
+		TEST_##name(): TestBase(#name, status, igne) {} \
 		void do_test(); \
 	} TEST_##name; \
 	void TEST_##name::do_test()
+
+#define _TEST_STATUS(name, status) _TEST_STATUS_DEF(name, status, false)
+#define _TEST_STATUS_CTH(name, status) _TEST_STATUS_DEF(name, status, true)
 
 #define TEST(name) _TEST_STATUS(name, ::test::SUCCESS)
 #define TEST_FAIL(name) _TEST_STATUS(name, ::test::FAILED)
@@ -128,6 +143,7 @@ TestBase::TestBase(const char* n, TestStatus s): name(n), expected_status(s) {
 #define TEST_SEGFAULT(name) _TEST_STATUS(name, ::test::SIGNAL_SEGFAULT)
 #define TEST_ABORT(name) _TEST_STATUS(name, ::test::SIGNAL_ABORT)
 #define TEST_DIVZERO(name) _TEST_STATUS(name, ::test::SIGNAL_DIVZERO)
+#define TEST_TERMINATE_HANDLER(name) _TEST_STATUS_CTH(name, ::test::EXCEPTION_UNCAUGHT)
 
 #define ASSERT(expr) \
 	(expr) ? static_cast<void>(0) \
