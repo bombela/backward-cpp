@@ -2074,8 +2074,17 @@ inline void raise(const E& e) {
 
 class ExceptionHandling {
 public:
-	ExceptionHandling() {
-		std::set_terminate(&terminate_handler);
+	static ExceptionHandling& instance() {
+		static ExceptionHandling instance;
+		return instance;
+	}
+
+	void enable() {
+		_original_handler = std::set_terminate(&terminate_handler);
+	}
+
+	void disable() {
+		std::set_terminate(_original_handler);
 	}
 
 	static void pprint_current_exception() {
@@ -2085,6 +2094,11 @@ public:
 	}
 
 private:
+	std::terminate_handler _original_handler;
+
+	ExceptionHandling() {}
+	~ExceptionHandling() {}
+
 	static void terminate_handler() {
 		pprint_current_exception();
 		SignalHandling::instance().abort();
@@ -2184,6 +2198,32 @@ private:
 				abi::__cxa_current_exception_type()->name()
 				);
 	}
+};
+
+class InstallExceptionHandling {
+public:
+	InstallExceptionHandling() {
+		ExceptionHandling::instance().enable();
+	}
+};
+
+class ScopedExceptionHandling {
+public:
+	ScopedExceptionHandling() {
+		ExceptionHandling::instance().enable();
+	}
+	~ScopedExceptionHandling() {
+		ExceptionHandling::instance().disable();
+	}
+#ifdef BACKWARD_ATLEAST_CXX11
+	ScopedExceptionHandling(const ScopedExceptionHandling&) = delete;
+	ScopedExceptionHandling& operator=(ScopedExceptionHandling) = delete;
+#endif
+private:
+#ifndef BACKWARD_ATLEAST_CXX11
+	ScopedExceptionHandling(const ScopedExceptionHandling&);
+	ScopedExceptionHandling& operator=(ScopedExceptionHandling);
+#endif
 };
 
 inline void pprint_current_exception() {
