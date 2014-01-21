@@ -2067,11 +2067,6 @@ public:
 	virtual void rethrow() const { throw static_cast<const E&>(*this); }
 };
 
-template <typename E>
-inline void raise(const E& e) {
-	throw exception_with_st_mixin<E>(e);
-}
-
 class ExceptionHandling {
 public:
 	static ExceptionHandling& instance() {
@@ -2226,13 +2221,20 @@ private:
 #endif
 };
 
+/*************** HELPERS FUNCTIONS **************/
+
+template <typename E>
+inline void raise(const E& e) {
+	throw exception_with_st_mixin<E>(e);
+}
+
 inline void pprint_current_exception() {
 	ExceptionHandling::pprint_current_exception();
 }
 
 #ifdef BACKWARD_ATLEAST_CXX11
 inline void pprint_exception(const std::exception_ptr& e) {
-try {
+	try {
 		std::rethrow_exception(e);
 	} catch (...) {
 		pprint_current_exception();
