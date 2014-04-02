@@ -1879,7 +1879,7 @@ public:
 		SIGXCPU,
 		SIGXFSZ
 	};
-        return std::vector<int>(signals, signals + sizeof signals);
+        return std::vector<int>(signals, signals + sizeof signals / sizeof signals[0] );
    }
 
   SignalHandling(const std::vector<int>& signals = make_default_signals()):
