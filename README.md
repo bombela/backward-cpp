@@ -123,19 +123,19 @@ class StackTrace { public:
 	// frame). You can also provide a trace address to load_from() assuming
 	// the address is a valid stack frame (useful for signal handling traces).
 	// Both function return size().
-	size_t load_here(size_t trace_cnt_max)
-	size_t load_from(void* address, size_t trace_cnt_max)
+	size_t load_here(size_t trace_cnt_max);
+	size_t load_from(void* address, size_t trace_cnt_max);
 
 	// The number of traces loaded. This can be less than "trace_cnt_max".
-	size_t size() const
+	size_t size() const;
 
 	// A unique id for the thread in which the trace was taken. The value
 	// 0 means the stack trace comes from the main thread.
-	size_t thread_id() const
+	size_t thread_id() const;
 
 	// Retrieve a trace by index. 0 is the most recent trace, size()-1 is
 	// the oldest one.
-	Trace operator[](size_t trace_idx)
+	Trace operator[](size_t trace_idx);
 };
 ```
 
@@ -168,11 +168,11 @@ The public methods are:
 class TraceResolver { public:
 	// Pre-load whatever is necessary from the stack trace.
 	template <class ST>
-		void load_stacktrace(ST&)
+	void load_stacktrace(ST&);
 
 	// Resolve a trace. It takes a ResolvedTrace, because a `Trace` or a
 	// `TraceWithLocals` are implicitly convertible to a ResolvedTrace.
-	ResolvedTrace resolve(ResolvedTrace t)
+	ResolvedTrace resolve(ResolvedTrace t);
 };
 ```
 
@@ -188,20 +188,20 @@ class SnippetFactory { public:
 
 	// Return a snippet starting at line_start with up to context_size lines.
 	lines_t get_snippet(const std::string& filename,
-			size_t line_start, size_t context_size)
+			size_t line_start, size_t context_size);
 
 	// Return a combined snippet from two different locations and combine them.
 	// context_size / 2 lines will be extracted from each location.
 	lines_t get_combined_snippet(
 			const std::string& filename_a, size_t line_a,
 			const std::string& filename_b, size_t line_b,
-			size_t context_size)
+			size_t context_size);
 
 	// Tries to return a unified snippet if the two locations from the same
 	// file are close enough to fit inside one context_size, else returns
 	// the equivalent of get_combined_snippet().
 	lines_t get_coalesced_snippet(const std::string& filename,
-			size_t line_a, size_t line_b, size_t context_size)
+			size_t line_a, size_t line_b, size_t context_size);
 ```
 
 ### Printer
@@ -240,7 +240,7 @@ class Printer { public:
 	// it is possible to access the underalying OS-level file descriptor, which
 	// is then used to determine if the output is a terminal to print in color.
 	template <typename StackTrace>
-		FILE* print(StackTrace& st, FILE* os = stderr)
+	FILE* print(StackTrace& st, FILE* os = stderr);
 ```
 
 
@@ -259,7 +259,7 @@ Creating the object registers all the different signals and hooks. Destroying
 this object doesn't do anything. It exposes only one method:
 
 ```c++
-bool loaded() const // true if loaded with success
+bool loaded() const; // true if loaded with success
 ```
 
 ### Trace object
