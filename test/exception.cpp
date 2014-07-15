@@ -30,20 +30,33 @@
 
 using namespace backward;
 
-void uncaught_level2() {
-	throw std::runtime_error("OmyGAAAD! Exception!");
+TEST(pprint_exception_primitive) {
+	try {
+		throw 42;
+	} catch (...) {
+		backward::pprint_current_exception();
+	}
 }
 
-void uncaught_level1() {
-	uncaught_level2();
+TEST(pprint_no_base_exception) {
+	struct error { };
+	try {
+		throw error();
+	} catch (...) {
+		backward::pprint_current_exception();
+	}
 }
 
-TEST_UNCAUGHT_EXCEPTION(uncaught) {
-	uncaught_level1();
+TEST(pprint_exception) {
+	try {
+		throw std::runtime_error("This is a really useless message.");
+	} catch (...) {
+		backward::pprint_current_exception();
+	}
 }
 
 void another_sub_function() {
-	backward::raise(std::runtime_error("OmyGAAAD! Exception!"));
+	throw std::runtime_error("Something bad happened here.");
 }
 
 void a_sub_function() {
@@ -65,22 +78,47 @@ void a_little_function() {
 TEST(rethrow) {
 	try {
 		a_little_function();
-	} catch (const std::exception& e) {
-		ExceptionHandling::pprint_current_exception();
+	} catch (...) {
+		backward::pprint_current_exception();
 	}
 }
 
 #ifdef BACKWARD_ATLEAST_CXX11
 
+std::exception_ptr catch_something() {
+	try {
+		throw std::runtime_error("Something bad happened here.");
+	} catch(...) {
+		return std::current_exception();
+	}
+}
+
+TEST(rethrow_exception_ptr) {
+	auto eptr = catch_something();
+	try {
+		std::rethrow_exception(eptr);
+	} catch (...) {
+		backward::pprint_current_exception();
+	}
+}
+
+void nested_level4() {
+	throw std::runtime_error("Shit's hitting the fan!");
+}
+
 void nested_level3() {
-	throw std::runtime_error("OmyGAAAD! Exception!");
+	try {
+		nested_level4();
+	} catch (std::exception& e) {
+		std::throw_with_nested(std::runtime_error("It's flying everywhere!"));
+	}
 }
 
 void nested_level2() {
 	try {
 		nested_level3();
 	} catch (std::exception& e) {
-		std::throw_with_nested(std::runtime_error("level1!"));
+		std::throw_with_nested(std::runtime_error("We are deep in it."));
 	}
 }
 
@@ -88,34 +126,34 @@ void nested_level1() {
 	try {
 		nested_level2();
 	} catch (std::exception& e) {
-		std::throw_with_nested(std::runtime_error("and level two"));
-	}
-}
-
-static int max_nested_level = 0;
-
-void print_nested_ex(std::exception& e, int level=0) {
-	std::cout << std::string(level, ' ')
-		<< " - exception: " << e.what() << std::endl;
-	max_nested_level = std::max(max_nested_level, level);
-	try {
-		std::rethrow_if_nested(e);
-	} catch (std::exception& e) {
-		print_nested_ex(e, level + 1);
+		std::throw_with_nested(std::runtime_error("What a mess."));
 	}
 }
 
 TEST(nested) {
 	try {
 		nested_level1();
-	} catch (std::exception& e) {
-		print_nested_ex(e);
+	} catch (...) {
+		backward::pprint_current_exception();
 	}
-	ASSERT_EQ(max_nested_level, 2);
 }
 
+#endif // BACKWARD_ATLEAST_CXX11
+
+void throw_too_far() {
+	throw std::runtime_error("Catch me if you can.");
+}
+
+TEST_TERMINATE_HANDLER(uncaught) {
+	throw_too_far();
+}
+
+
+// ------------------
+#ifdef BACKWARD_ATLEAST_CXX11
+
 void nested_2_level3() {
-	backward::raise(std::runtime_error("OmyGAAAD! Exception!"));
+	backward::throw_with_st(std::runtime_error("OmyGAAAD! Exception!"));
 }
 
 void nested_2_level2() {
@@ -134,30 +172,36 @@ void nested_2_level1() {
 	}
 }
 
-static int max_nested_2_level = 0;
-
-void print_nested_2_ex(std::exception& e, int level=0) {
-	std::cout << std::string(level, ' ')
-		<< " - exception: " << e.what() << std::endl;
-	max_nested_2_level = std::max(max_nested_2_level, level);
-	try {
-		std::rethrow_if_nested(e);
-	} catch (std::exception& e) {
-		print_nested_2_ex(e, level + 1);
-	}
-}
-
 TEST(nested2) {
 	try {
 		nested_2_level1();
 	} catch (std::exception& e) {
-		print_nested_2_ex(e);
+		backward::pprint_current_exception();
 	}
-	ASSERT_EQ(max_nested_2_level, 2);
 }
 
-#endif
+TEST_TERMINATE_HANDLER(nested3) {
+	nested_2_level1();
+}
+
+#endif  // BACKWARD_ATLEAST_CXX11
 
 TEST(not_pprint_current_exception) {
 	backward::pprint_current_exception();
+}
+
+void uncaught2_level2() {
+	backward::throw_with_st(std::runtime_error("OmyGAAAD! Exception!"));
+}
+
+void uncaught2_level1() {
+	try {
+		uncaught2_level2();
+	} catch (...) {
+		std::throw_with_nested(std::runtime_error("nested"));
+	}
+}
+
+TEST_TERMINATE_HANDLER(uncaught2) {
+	uncaught2_level1();
 }

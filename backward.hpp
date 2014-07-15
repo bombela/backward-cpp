@@ -480,7 +480,7 @@ template <typename TAG>
 class StackTraceImpl {
 public:
 	size_t size() const { return 0; }
-	Trace operator[](size_t) { return Trace(); }
+	Trace operator[](size_t) const { return Trace(); }
 	size_t load_here(size_t=0) { return 0; }
 	size_t load_from(void*, size_t=0) { return 0; }
 	unsigned thread_id() const { return 0; }
@@ -519,7 +519,7 @@ public:
 	size_t size() const {
 		return _stacktrace.size() ? _stacktrace.size() - skip_n_firsts() : 0;
 	}
-	Trace operator[](size_t idx) {
+	Trace operator[](size_t idx) const {
 		if (idx >= size()) {
 			return Trace();
 		}
@@ -2047,12 +2047,12 @@ private:
 class exception_with_st {
 public:
 #ifdef BACKWARD_ATLEAST_CXX11
-	virtual ~exception_with_st() {}
+	virtual ~exception_with_st() noexcept {}
 #else
 	virtual ~exception_with_st() throw() {}
 #endif
 	exception_with_st() { _st.load_here(); }
-	StackTrace& stacktrace() { return _st; }
+	const StackTrace& stacktrace() const { return _st; }
 	virtual void rethrow() const = 0;
 private:
 	StackTrace _st;
@@ -2061,98 +2061,119 @@ private:
 template <typename E>
 class exception_with_st_mixin: public E, public exception_with_st {
 public:
+#ifdef BACKWARD_ATLEAST_CXX11
+	virtual ~exception_with_st_mixin() noexcept {}
+#else
 	virtual ~exception_with_st_mixin() throw() {}
+#endif
 	exception_with_st_mixin(const E& e):
 		E(e), exception_with_st() {}
 	virtual void rethrow() const { throw static_cast<const E&>(*this); }
 };
 
-class ExceptionHandling {
+/*************** EXCEPTION PRINTER **************/
+
+class ExceptionPrinter {
 public:
-	static ExceptionHandling& instance() {
-		static ExceptionHandling instance;
-		return instance;
-	}
+	void print_current_exception() {
+		const std::type_info* exception_type = current_exception_type();
+		if (not exception_type) {
+			fprintf(stderr, "No exception in flight to be printed.\n");
+			return;
+		}
 
-	void enable() {
-		_original_handler = std::set_terminate(&terminate_handler);
-	}
-
-	void disable() {
-		std::set_terminate(_original_handler);
-	}
-
-	static void pprint_current_exception() {
+		fprintf(stderr, "Printing exception in flight from here:\n");
+		_nested_level = 0;
 		StackTrace st;
 		st.load_here();
-		print_exception(&st);
+		print_stacktrace(st);
+		print_exception_in_flight();
 	}
 
 private:
-	std::terminate_handler _original_handler;
+	unsigned _nested_level;
 
-	ExceptionHandling() {}
-	~ExceptionHandling() {}
-
-	static void terminate_handler() {
-		pprint_current_exception();
-		SignalHandling::instance().abort();
-		abort();
+	const std::type_info* current_exception_type() {
+		return abi::__cxa_current_exception_type();
 	}
 
-	static void print_exception(StackTrace* st = 0) {
-		const std::type_info* current_exception =
-			abi::__cxa_current_exception_type();
-		if (not current_exception) {
-			return;
+	std::string exception_typename(const std::type_info* const exception_type) {
+		return details::demangler().demangle(exception_type->name());
+	}
+
+	void print_exception_in_flight() {
+		const std::string typename_ =
+			exception_typename(current_exception_type());
+
+		for (unsigned i = 1; i < _nested_level; ++i) {
+			fprintf(stderr, "  ");
 		}
-		const std::string exception_typename =
-			details::demangler().demangle(current_exception->name());
-		if (st) {
-			print_stacktrace(*st);
+		if (_nested_level > 0) {
+			fprintf(stderr, " - ");
 		}
+
 		try {
 			throw; // rethrow whatever we have got.
-		} catch (exception_with_st& e) {
-			fprintf(stderr, "Exception originally thrown from:\n");
-			print_stacktrace(e.stacktrace());
-			try {
-				e.rethrow();
-			} catch (...) {
-				print_exception();
-			}
+		} catch (const std::nested_exception& e) {
+			fprintf(stderr, "Nested exception #%u (%s): %s\n", _nested_level,
+					typename_.c_str(), dynamic_cast<const std::exception&>(e).what());
+			print_if_nested(dynamic_cast<const std::exception&>(e));
+//        } catch (const exception_with_st& e) {
+//            fprintf(stderr, "Exception raised with a stacktrace:\n");
+			//print_stacktrace(e.stacktrace());
+//            try {
+//                e.rethrow();
+//            } catch (...) {
+//                print_exception();
+//            }
 		} catch (const std::exception& e) {
-			fprintf(stderr, "Exception (%s): %s\n",
-					exception_typename.c_str(), e.what());
+			if (_nested_level > 0) {
+				fprintf(stderr, "Nested exception #%u (%s): %s\n",
+						_nested_level, typename_.c_str(), e.what());
+			} else {
+				fprintf(stderr, "Exception (%s): %s\n",
+						typename_.c_str(), e.what());
+			}
+			print_if_nested(e);
 		} catch (...) {
-			fprintf(stderr, "Exception (%s).\n",
-					exception_typename.c_str());
+			fprintf(stderr, "Exception (%s).\n", typename_.c_str());
 		}
 	}
 
-	static bool is_start_of_trace(const std::string& function) {
+#ifdef BACKWARD_ATLEAST_CXX11
+	void print_if_nested(const std::exception& e) {
+		try {
+			std::rethrow_if_nested(e);
+		} catch (...) {
+			_nested_level += 1;
+			print_exception_in_flight();
+		}
+	}
+#endif // BACKWARD_ATLEAST_CXX11
+
+	bool is_start_of_trace(const std::string& function) {
 		if (function == "__cxa_throw") {
 			return true;
 		}
 		if (function == "__cxa_rethrow") {
 			return true;
 		}
-		if (function.find("backward::raise")
+		if (function.find("backward::throw_with_st")
 				!= std::string::npos) {
 			return true;
 		}
-		if (function.find("backward::raise<")
+		if (function.find("backward::pprint_current_exception")
 				!= std::string::npos) {
 			return true;
 		}
-		if (function.find("pprint_current_exception")
+		if (function.find("std::throw_with_nested")
 				!= std::string::npos) {
 			return true;
 		}
 		return false;
 	}
 
-	static void print_stacktrace(StackTrace& st) {
+	void print_stacktrace(const StackTrace& st) {
 		typedef std::vector<ResolvedTrace> resolved_traces_t;
 		resolved_traces_t resolved_traces;
 		resolved_traces.reserve(st.size());
@@ -2187,11 +2208,54 @@ private:
 		printer.print(resolved_traces.begin(), resolved_traces.end(), stderr,
 				st.thread_id());
 	}
+};
 
-	static const std::string current_exception_typename() {
-		return details::demangler().demangle(
-				abi::__cxa_current_exception_type()->name()
-				);
+/************** EXCEPTION HANDLING **************/
+
+class ExceptionHandling {
+public:
+	static ExceptionHandling& instance() {
+		static ExceptionHandling instance;
+		return instance;
+	}
+
+	void enable() {
+		_original_handler = std::set_terminate(&terminate_handler);
+	}
+
+	void disable() {
+		std::set_terminate(_original_handler);
+	}
+
+private:
+	std::terminate_handler _original_handler;
+
+	ExceptionHandling() {}
+	~ExceptionHandling() {}
+
+	static void terminate_handler() {
+		ExceptionPrinter printer;
+		printer.print_current_exception();
+//        StackTrace st;
+//        st.load_here();
+
+//        const std::type_info* const exception_type = current_exception_type();
+//        if (exception_type) {
+//            fprintf(stderr,
+//                    "terminate called after throwing an instance of '%s'\n",
+//                    exception_typename(current_exception_type()).c_str());
+//            print_stacktrace(st);
+//            print_exception(exception_typename(exception_type));
+//            fprintf(stderr,
+//                    "terminate called after throwing an instance of '%s'\n",
+//                    exception_typename(current_exception_type()).c_str());
+//        } else {
+//            print_stacktrace(st);
+//            fprintf(stderr, "terminate called without an active exception\n");
+//        }
+		fprintf(stderr, "terminate called\n");
+		SignalHandling::instance().abort();
+		::abort();
 	}
 };
 
@@ -2224,12 +2288,13 @@ private:
 /*************** HELPERS FUNCTIONS **************/
 
 template <typename E>
-inline void raise(const E& e) {
+inline void throw_with_st(const E& e) {
 	throw exception_with_st_mixin<E>(e);
 }
 
 inline void pprint_current_exception() {
-	ExceptionHandling::pprint_current_exception();
+	ExceptionPrinter printer;
+	printer.print_current_exception();
 }
 
 #ifdef BACKWARD_ATLEAST_CXX11

@@ -143,7 +143,7 @@ TestBase::TestBase(const char* n, TestStatus s, bool cth):
 #define TEST_SEGFAULT(name) _TEST_STATUS(name, ::test::SIGNAL_SEGFAULT)
 #define TEST_ABORT(name) _TEST_STATUS(name, ::test::SIGNAL_ABORT)
 #define TEST_DIVZERO(name) _TEST_STATUS(name, ::test::SIGNAL_DIVZERO)
-#define TEST_TERMINATE_HANDLER(name) _TEST_STATUS_CTH(name, ::test::EXCEPTION_UNCAUGHT)
+#define TEST_TERMINATE_HANDLER(name) _TEST_STATUS_CTH(name, ::test::SIGNAL_ABORT)
 
 #define ASSERT(expr) \
 	(expr) ? static_cast<void>(0) \
