@@ -24,6 +24,13 @@ cmake_minimum_required(VERSION 2.8)
 project(backward CXX)
 
 ###############################################################################
+# OPTIONS
+###############################################################################
+
+option(BACKWARD_TESTS "Compile tests" ON)
+option(BACKWARD_ENABLE_ONLY_IN_DEBUG "Enable backward only if build type is Debug/RelWithDebInfo" OFF)
+
+###############################################################################
 # COMPILER FLAGS
 ###############################################################################
 
@@ -65,40 +72,42 @@ endforeach()
 # TESTS
 ###############################################################################
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+if(BACKWARD_TESTS)
+	include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_library(test_main SHARED test/_test_main.cpp)
+	add_library(test_main SHARED test/_test_main.cpp)
 
-macro(backward_add_test src src_dep)
-	get_filename_component(name ${src} NAME_WE)
-	set(test_name "test_${name}")
+	macro(backward_add_test src src_dep)
+		get_filename_component(name ${src} NAME_WE)
+		set(test_name "test_${name}")
 
-	add_executable(${test_name} ${src} ${src_dep})
+		add_executable(${test_name} ${src} ${src_dep})
 
-	set_target_properties(${test_name} PROPERTIES
-		COMPILE_DEFINITIONS "${BACKWARD_DEFINITIONS}")
+		set_target_properties(${test_name} PROPERTIES
+			COMPILE_DEFINITIONS "${BACKWARD_DEFINITIONS}")
 
-	target_link_libraries(${test_name} dw bfd dl test_main)
-	add_test(NAME ${name} COMMAND ${test_name})
-endmacro()
+		target_link_libraries(${test_name} dw bfd dl test_main)
+		add_test(NAME ${name} COMMAND ${test_name})
+	endmacro()
 
-# Tests without backward.cpp
-set(TESTS
-	test
-	stacktrace	
-	rectrace	
-	select_signals
-	)
+	# Tests without backward.cpp
+	set(TESTS
+		test
+		stacktrace
+		rectrace
+		select_signals
+		)
 
-foreach(test ${TESTS})
-	backward_add_test(test/${test}.cpp "")
-endforeach()
+	foreach(test ${TESTS})
+		backward_add_test(test/${test}.cpp "")
+	endforeach()
 
-# Tests with backward.cpp
-set(TESTS
-	suicide
-	)
+	# Tests with backward.cpp
+	set(TESTS
+		suicide
+		)
 
-foreach(test ${TESTS})
-	backward_add_test(test/${test}.cpp backward.cpp)
-endforeach()
+	foreach(test ${TESTS})
+		backward_add_test(test/${test}.cpp backward.cpp)
+	endforeach()
+endif()
