@@ -39,7 +39,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_COMPILER_IS_GNUCXX)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 endif()
 
-include_directories(${CMAKE_SOURCE_DIR}/include)
 enable_testing()
 
 ###############################################################################
