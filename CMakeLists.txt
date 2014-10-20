@@ -84,7 +84,7 @@ endmacro()
 map_definitions("STACK_DETAILS_" "BACKWARD_HAS_" BACKTRACE_SYMBOL DW BFD)
 map_definitions("STACK_WALKING_" "BACKWARD_HAS_" UNWIND BACKTRACE)
 
-foreach(def ${BACKWARD_DEFINITIONS})
+foreach(def ${backward_DEFINITIONS})
 	message(STATUS "${def}")
 endforeach()
 
