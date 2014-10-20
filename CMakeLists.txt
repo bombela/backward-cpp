@@ -92,7 +92,7 @@ endforeach()
 add_library(enable_backward OBJECT backward.cpp)
 target_compile_definitions(enable_backward PRIVATE ${backward_DEFINITIONS})
 
-if(BACKWARD_ONLY_IF_DEBUG)
+if(BACKWARD_ENABLE_ONLY_IN_DEBUG)
 	set(backward_ENABLE $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:$<TARGET_OBJECTS:enable_backward> CACHE STRING
 	"object to enable automatic backward processing (only in Debug/RelWithDebInfo)")
 else()
