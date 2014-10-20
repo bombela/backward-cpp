@@ -28,7 +28,6 @@ project(backward CXX)
 ###############################################################################
 
 option(BACKWARD_TESTS "Compile tests" ON)
-option(BACKWARD_ENABLE_ONLY_IN_DEBUG "Enable backward only if build type is Debug/RelWithDebInfo" OFF)
 
 ###############################################################################
 # COMPILER FLAGS
@@ -92,13 +91,9 @@ endforeach()
 add_library(enable_backward OBJECT backward.cpp)
 target_compile_definitions(enable_backward PRIVATE ${backward_DEFINITIONS})
 
-if(BACKWARD_ONLY_IF_DEBUG)
-	set(backward_ENABLE $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:$<TARGET_OBJECTS:enable_backward> CACHE STRING
-	"object to enable automatic backward processing (only in Debug/RelWithDebInfo)")
-else()
-	set(backward_ENABLE $<TARGET_OBJECTS:enable_backward> CACHE STRING
-	"object to enable automatic backward processing")
-endif()
+set(backward_ENABLE $<TARGET_OBJECTS:enable_backward> CACHE STRING
+"object to enable automatic backward processing")
+
 set(backward_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR} CACHE STRING "backward include directory")
 set(backward_DEFINITIONS ${backward_DEFINITIONS} CACHE STRING "backward feature definitions")
 set(backward_LIBRARIES ${backward_LIBRARIES} CACHE STRING "backward libraries")
