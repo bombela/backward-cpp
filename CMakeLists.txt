@@ -101,6 +101,8 @@ macro(add_backward target)
 	set_property(TARGET ${target} APPEND PROPERTY LINK_LIBRARIES ${BACKWARD_LIBRARIES})
 endmacro()
 
+mark_as_advanced(BACKWARD_INCLUDE_DIR BACKWARD_DEFINITIONS BACKWARD_LIBRARIES)
+
 ###############################################################################
 # TESTS
 ###############################################################################
