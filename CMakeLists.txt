@@ -76,7 +76,7 @@ endif()
 macro(map_definitions var_prefix define_prefix)
 	foreach(def ${ARGV})
 		if (${${var_prefix}${def}})
-			LIST(APPEND backward_DEFINITIONS "${define_prefix}${def}=1")
+			LIST(APPEND BACKWARD_DEFINITIONS "${define_prefix}${def}=1")
 		endif()
 	endforeach()
 endmacro()
@@ -84,21 +84,21 @@ endmacro()
 map_definitions("STACK_DETAILS_" "BACKWARD_HAS_" BACKTRACE_SYMBOL DW BFD)
 map_definitions("STACK_WALKING_" "BACKWARD_HAS_" UNWIND BACKTRACE)
 
-foreach(def ${backward_DEFINITIONS})
+foreach(def ${BACKWARD_DEFINITIONS})
 	message(STATUS "${def}")
 endforeach()
 
 add_library(enable_backward OBJECT backward.cpp)
-set(backward_ENABLE $<TARGET_OBJECTS:enable_backward> CACHE STRING
+set(BACKWARD_ENABLE $<TARGET_OBJECTS:enable_backward> CACHE STRING
 "object to enable automatic backward processing")
 
-set(backward_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR} CACHE STRING "backward include directory")
-set(backward_DEFINITIONS ${backward_DEFINITIONS} CACHE STRING "backward feature definitions")
-set(backward_LIBRARIES ${backward_LIBRARIES} CACHE STRING "backward libraries")
+set(BACKWARD_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR} CACHE STRING "backward include directory")
+set(BACKWARD_DEFINITIONS ${BACKWARD_DEFINITIONS} CACHE STRING "backward feature definitions")
+set(BACKWARD_LIBRARIES ${BACKWARD_LIBRARIES} CACHE STRING "backward libraries")
 macro(add_backward target)
-	target_include_directories(${target} PRIVATE ${backward_INCLUDE_DIR})
-	set_property(TARGET ${target} APPEND PROPERTY COMPILE_DEFINITIONS ${backward_DEFINITIONS})
-	set_property(TARGET ${target} APPEND PROPERTY LINK_LIBRARIES ${backward_LIBRARIES})
+	target_include_directories(${target} PRIVATE ${BACKWARD_INCLUDE_DIR})
+	set_property(TARGET ${target} APPEND PROPERTY COMPILE_DEFINITIONS ${BACKWARD_DEFINITIONS})
+	set_property(TARGET ${target} APPEND PROPERTY LINK_LIBRARIES ${BACKWARD_LIBRARIES})
 endmacro()
 
 ###############################################################################
