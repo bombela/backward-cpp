@@ -89,6 +89,7 @@ foreach(def ${BACKWARD_DEFINITIONS})
 endforeach()
 
 add_library(enable_backward OBJECT backward.cpp)
+target_compile_definitions(enable_backward PRIVATE ${BACKWARD_DEFINITIONS})
 set(BACKWARD_ENABLE $<TARGET_OBJECTS:enable_backward> CACHE STRING
 "object to enable automatic backward processing")
 
