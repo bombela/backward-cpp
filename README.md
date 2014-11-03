@@ -41,6 +41,20 @@ doing at your convenience.
 
 ##Configuration & Dependencies
 
+### Integration with CMake
+
+If you are using CMake and want to use its configuration abilities to save
+you the trouble, you can easily integrate Backward:
+```
+add_subdirectory(/path/to/backward-cpp)
+
+# This will add backward.cpp to your target
+add_executable(myproject mysource.cpp ${backward_ENABLE})
+
+# This will add libraries, definitions and include directories needed by backward
+add_backward(myproject)
+```
+
 ### Compile with debug info
 
 You need to compile your project with generation of debug symbols enabled,
