@@ -65,6 +65,8 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <cctype>
+#include <string>
 #include <new>
 #include <iomanip>
 #include <vector>
@@ -310,7 +312,7 @@ class handle {
 
 public:
 	~handle() {
-		if (not _empty) {
+		if (!_empty) {
 			Deleter()(_val);
 		}
 	}
@@ -439,13 +441,13 @@ struct ResolvedTrace: public Trace {
 
 		bool operator==(const SourceLoc& b) const {
 			return function == b.function
-				and filename == b.filename
-				and line == b.line
-				and col == b.col;
+				&& filename == b.filename
+				&& line == b.line
+				&& col == b.col;
 		}
 
 		bool operator!=(const SourceLoc& b) const {
-			return not (*this == b);
+			return !(*this == b);
 		}
 	};
 
@@ -564,13 +566,13 @@ private:
 	}
 
 	_Unwind_Reason_Code backtrace(_Unwind_Context* ctx) {
-		if (_index >= 0 and static_cast<size_t>(_index) >= _depth)
+		if (_index >= 0 && static_cast<size_t>(_index) >= _depth)
 			return _URC_END_OF_STACK;
 
 		int ip_before_instruction = 0;
 		uintptr_t ip = _Unwind_GetIPInfo(ctx, &ip_before_instruction);
 
-		if (not ip_before_instruction) {
+		if (!ip_before_instruction) {
 			ip -= 1;
 		}
 
@@ -765,7 +767,7 @@ public:
 		// trace.addr is a virtual address in memory pointing to some code.
 		// Let's try to find from which loaded object it comes from.
 		// The loaded object can be yourself btw.
-		if (not dladdr(trace.addr, &symbol_info)) {
+		if (!dladdr(trace.addr, &symbol_info)) {
 			return trace; // dat broken trace...
 		}
 
@@ -784,13 +786,13 @@ public:
 			trace.object_function = demangle(symbol_info.dli_sname);
 		}
 
-		if (not symbol_info.dli_fname) {
+		if (!symbol_info.dli_fname) {
 			return trace;
 		}
 
 		trace.object_filename = symbol_info.dli_fname;
 		bfd_fileobject& fobj = load_object_with_bfd(symbol_info.dli_fname);
-		if (not fobj.handle) {
+		if (!fobj.handle) {
 			return trace; // sad, we couldn't load the object :(
 		}
 
@@ -819,13 +821,13 @@ public:
 				symbol_info.dli_fbase);
 
 		// In debug mode, we should always get the right thing(TM).
-		if (details_call_site.found and details_adjusted_call_site.found) {
+		if (details_call_site.found && details_adjusted_call_site.found) {
 			// Ok, we assume that details_adjusted_call_site is a better estimation.
 			details_selected = &details_adjusted_call_site;
 			trace.addr = (void*) (uintptr_t(trace.addr) - 1);
 		}
 
-		if (details_selected == &details_call_site and details_call_site.found) {
+		if (details_selected == &details_call_site && details_call_site.found) {
 			// we have to re-resolve the symbol in order to reset some
 			// internal state in BFD... so we can call backtrace_inliners
 			// thereafter...
@@ -848,7 +850,7 @@ public:
 				// trace.function.
 				trace.source.function = demangle(details_selected->funcname);
 
-				if (not symbol_info.dli_sname) {
+				if (!symbol_info.dli_sname) {
 					// for the case dladdr failed to find the symbol name of
 					// the function, we might as well try to put something
 					// here.
@@ -933,7 +935,7 @@ private:
 	bfd_fileobject& load_object_with_bfd(const std::string& filename_object) {
 		using namespace details;
 
-		if (not _bfd_loaded) {
+		if (!_bfd_loaded) {
 			using namespace details;
 			bfd_init();
 			_bfd_loaded = true;
@@ -955,12 +957,12 @@ private:
 		bfd_handle.reset(
 				bfd_fdopenr(filename_object.c_str(), "default", fd)
 				);
-		if (not bfd_handle) {
+		if (!bfd_handle) {
 			close(fd);
 			return r;
 		}
 
-		if (not bfd_check_format(bfd_handle.get(), bfd_object)) {
+		if (!bfd_check_format(bfd_handle.get(), bfd_object)) {
 			return r; // not an object? You lose.
 		}
 
@@ -974,7 +976,7 @@ private:
 		ssize_t dyn_symtab_storage_size =
 			bfd_get_dynamic_symtab_upper_bound(bfd_handle.get());
 
-		if (symtab_storage_size <= 0 and dyn_symtab_storage_size <= 0) {
+		if (symtab_storage_size <= 0 && dyn_symtab_storage_size <= 0) {
 			return r; // weird, is the file is corrupted?
 		}
 
@@ -1000,7 +1002,7 @@ private:
 		}
 
 
-		if (symcount <= 0 and dyn_symcount <= 0) {
+		if (symcount <= 0 && dyn_symcount <= 0) {
 			return r; // damned, that's a stripped file that you got there!
 		}
 
@@ -1062,20 +1064,20 @@ private:
 		bfd_size_type size = bfd_get_section_size(section);
 
 		// are we in the boundaries of the section?
-		if (addr < sec_addr or addr >= sec_addr + size) {
+		if (addr < sec_addr || addr >= sec_addr + size) {
 			addr -= base_addr; // oups, a relocated object, lets try again...
-			if (addr < sec_addr or addr >= sec_addr + size) {
+			if (addr < sec_addr || addr >= sec_addr + size) {
 				return;
 			}
 		}
 
-		if (not result.found and fobj.symtab) {
+		if (!result.found && fobj.symtab) {
 			result.found = bfd_find_nearest_line(fobj.handle.get(), section,
 					fobj.symtab.get(), addr - sec_addr, &result.filename,
 					&result.funcname, &result.line);
 		}
 
-		if (not result.found and fobj.dynamic_symtab) {
+		if (!result.found && fobj.dynamic_symtab) {
 			result.found = bfd_find_nearest_line(fobj.handle.get(), section,
 					fobj.dynamic_symtab.get(), addr - sec_addr,
 					&result.filename, &result.funcname, &result.line);
@@ -1114,7 +1116,7 @@ private:
 	}
 
 	bool cstrings_eq(const char* a, const char* b) {
-		if (not a or not b) {
+		if (!a || !b) {
 			return false;
 		}
 		return strcmp(a, b) == 0;
@@ -1139,7 +1141,7 @@ public:
 
 		Dwarf_Addr trace_addr = (Dwarf_Addr) trace.addr;
 
-		if (not _dwfl_handle_initialized) {
+		if (!_dwfl_handle_initialized) {
 			// initialize dwfl...
 			_dwfl_cb.reset(new Dwfl_Callbacks);
 			_dwfl_cb->find_elf = &dwfl_linux_proc_find_elf;
@@ -1149,7 +1151,7 @@ public:
 			_dwfl_handle.reset(dwfl_begin(_dwfl_cb.get()));
 			_dwfl_handle_initialized = true;
 
-			if (not _dwfl_handle) {
+			if (!_dwfl_handle) {
 				return trace;
 			}
 
@@ -1162,7 +1164,7 @@ public:
 			}
 		}
 
-		if (not _dwfl_handle) {
+		if (!_dwfl_handle) {
 			return trace;
 		}
 
@@ -1199,7 +1201,7 @@ public:
 		Dwarf_Die* cudie = dwfl_module_addrdie(mod, trace_addr, &mod_bias);
 
 #if 1
-		if (not cudie) {
+		if (!cudie) {
 			// Sadly clang does not generate the section .debug_aranges, thus
 			// dwfl_module_addrdie will fail early. Clang doesn't either set
 			// the lowpc/highpc/range info for every compilation unit.
@@ -1223,7 +1225,7 @@ public:
 
 //#define BACKWARD_I_DO_NOT_RECOMMEND_TO_ENABLE_THIS_HORRIBLE_PIECE_OF_CODE
 #ifdef BACKWARD_I_DO_NOT_RECOMMEND_TO_ENABLE_THIS_HORRIBLE_PIECE_OF_CODE
-		if (not cudie) {
+		if (!cudie) {
 			// If it's still not enough, lets dive deeper in the shit, and try
 			// to save the world again: for every compilation unit, we will
 			// load the corresponding .debug_line section, and see if we can
@@ -1252,7 +1254,7 @@ public:
 		}
 #endif
 
-		if (not cudie) {
+		if (!cudie) {
 			return trace; // this time we lost the game :/
 		}
 
@@ -1350,14 +1352,14 @@ private:
 				}
 				high = low + value;
 			}
-			return pc >= low and pc < high;
+			return pc >= low && pc < high;
 		}
 
 		// non-continuous range.
 		Dwarf_Addr base;
 		ptrdiff_t offset = 0;
 		while ((offset = dwarf_ranges(die, offset, &base, &low, &high)) > 0) {
-			if (pc >= low and pc < high) {
+			if (pc >= low && pc < high) {
 				return true;
 			}
 		}
@@ -1383,7 +1385,7 @@ private:
 					Dwarf_Attribute attr_mem;
 					dwarf_formflag(dwarf_attr(die, DW_AT_declaration,
 								&attr_mem), &declaration);
-					if (not declaration) {
+					if (!declaration) {
 						// let's be curious and look deeper in the tree,
 						// function are not necessarily at the first level, but
 						// might be nested inside a namespace, structure etc.
@@ -1413,14 +1415,14 @@ private:
 			bool declaration = false;
 			Dwarf_Attribute attr_mem;
 			dwarf_formflag(dwarf_attr(die, DW_AT_declaration, &attr_mem), &declaration);
-			if (not declaration) {
+			if (!declaration) {
 				// let's be curious and look deeper in the tree, function are
 				// not necessarily at the first level, but might be nested
 				// inside a namespace, structure, a function, an inlined
 				// function etc.
 				branch_has_pc = deep_first_search_by_pc(die, pc, cb);
 			}
-			if (not branch_has_pc) {
+			if (!branch_has_pc) {
 				branch_has_pc = die_has_pc(die, pc);
 			}
 			if (branch_has_pc) {
@@ -1443,14 +1445,14 @@ private:
 
 		Dwarf_Die die_mem;
 		Dwarf_Die* cudie = dwarf_diecu(die, &die_mem, 0, 0);
-		if (not cudie) {
+		if (!cudie) {
 			return 0;
 		}
 
 		Dwarf_Files* files = 0;
 		size_t nfiles;
 		dwarf_getsrcfiles(cudie, &files, &nfiles);
-		if (not files) {
+		if (!files) {
 			return 0;
 		}
 
@@ -1496,8 +1498,8 @@ public:
 		unsigned line_idx;
 
 		for (line_idx = 1; line_idx < line_start; ++line_idx) {
-			getline(*_file, line);
-			if (not *_file) {
+			std::getline(*_file, line);
+			if (!*_file) {
 				return lines;
 			}
 		}
@@ -1514,10 +1516,10 @@ public:
 		bool started = false;
 		for (; line_idx < line_start + line_count; ++line_idx) {
 			getline(*_file, line);
-			if (not *_file) {
+			if (!*_file) {
 				return lines;
 			}
-			if (not started) {
+			if (!started) {
 				if (std::find_if(line.begin(), line.end(),
 							not_isspace()) == line.end())
 					continue;
@@ -1542,14 +1544,14 @@ public:
 	// workaround.
 	struct not_isspace {
 		bool operator()(char c) {
-			return not std::isspace(c);
+			return !std::isspace(c);
 		}
 	};
 	// and define this one here because C++98 is not happy with local defined
 	// struct passed to template functions, fuuuu.
 	struct not_isempty {
 		bool operator()(const lines_t::value_type& p) {
-			return not (std::find_if(p.second.begin(), p.second.end(),
+			return !(std::find_if(p.second.begin(), p.second.end(),
 						not_isspace()) == p.second.end());
 		}
 	};
@@ -1670,7 +1672,7 @@ public:
 	}
 
 	void set_color(Color::type ccode) {
-		if (not _istty) return;
+		if (!_istty) return;
 
 		// I assume that the terminal can handle basic colors. Seriously I
 		// don't want to deal with all the termcap shit.
@@ -1768,7 +1770,7 @@ private:
 		fprintf(os, "#%-2u", trace.idx);
 		bool already_indented = true;
 
-		if (not trace.source.filename.size() or object) {
+		if (!trace.source.filename.size() || object) {
 			fprintf(os, "   Object \"%s\", at %p, in %s\n",
 					trace.object_filename.c_str(), trace.addr,
 					trace.object_function.c_str());
@@ -1777,7 +1779,7 @@ private:
 
 		for (size_t inliner_idx = trace.inliners.size();
 				inliner_idx > 0; --inliner_idx) {
-			if (not already_indented) {
+			if (!already_indented) {
 				fprintf(os, "   ");
 			}
 			const ResolvedTrace::SourceLoc& inliner_loc
@@ -1791,7 +1793,7 @@ private:
 		}
 
 		if (trace.source.filename.size()) {
-			if (not already_indented) {
+			if (!already_indented) {
 				fprintf(os, "   ");
 			}
 			print_source_loc(os, "   ", trace.source, trace.addr);
@@ -1835,7 +1837,7 @@ private:
 				indent, source_loc.filename.c_str(), (int)source_loc.line,
 				source_loc.function.c_str());
 
-		if (address and addr != 0) {
+		if (address && addr != 0) {
 			fprintf(os, " [%p]\n", addr);
 		} else {
 			fprintf(os, "\n");
@@ -1966,6 +1968,7 @@ class SignalHandling {
 public:
 	SignalHandling(const std::vector<int>& = std::vector<int>()) {}
 	bool init() { return false; }
+	bool loaded() { return false; }
 };
 
 #endif // BACKWARD_SYSTEM_UNKNOWN
