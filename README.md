@@ -119,12 +119,12 @@ the Internet, you will appreciate the simplicity of Backward's API.
 
 ### Stacktrace
 
-The Stacktrace class lets you take a "snapshot" of the current stack.
+The StackTrace class lets you take a "snapshot" of the current stack.
 You can use it like this:
 
 ```c++
 using namespace backward;
-Stacktrace st; st.load_here(32);
+StackTrace st; st.load_here(32);
 Printer p; p.print(st);
 ```
 
@@ -163,7 +163,7 @@ You can use it like this:
 
 ```c++
 using namespace backward;
-Stacktrace st; st.load_here(32);
+StackTrace st; st.load_here(32);
 
 TraceResolver tr; tr.load_stacktrace(st);
 for (size_t i = 0; i < st.size(); ++i) {
@@ -225,7 +225,7 @@ automatically resolve the traces for you:
 
 ```c++
 using namespace backward;
-Stacktrace st; st.load_here(32);
+StackTrace st; st.load_here(32);
 Printer p;
 p.object = true;
 p.color = false;
