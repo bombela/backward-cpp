@@ -1853,7 +1853,7 @@ private:
 class SignalHandling {
 public:
    static std::vector<int> make_default_signals() {
-       const int signals[] = {
+       const int posix_signals[] = {
 		// default action: Core
 		SIGILL,
 		SIGABRT,
@@ -1882,10 +1882,10 @@ public:
 		SIGXCPU,
 		SIGXFSZ
 	};
-        return std::vector<int>(signals, signals + sizeof signals / sizeof signals[0] );
+        return std::vector<int>(posix_signals, posix_signals + sizeof posix_signals / sizeof posix_signals[0] );
    }
 
-  SignalHandling(const std::vector<int>& signals = make_default_signals()):
+  SignalHandling(const std::vector<int>& posix_signals = make_default_signals()):
 	  _loaded(false) {
 		bool success = true;
 
@@ -1903,16 +1903,16 @@ public:
 			success = false;
 		}
 
-		for (size_t i = 0; i < signals.size(); ++i) {
+		for (size_t i = 0; i < posix_signals.size(); ++i) {
 			struct sigaction action;
 			memset(&action, 0, sizeof action);
 			action.sa_flags = (SA_SIGINFO | SA_ONSTACK | SA_NODEFER |
 					SA_RESETHAND);
 			sigfillset(&action.sa_mask);
-			sigdelset(&action.sa_mask, signals[i]);
+			sigdelset(&action.sa_mask, posix_signals[i]);
 			action.sa_sigaction = &sig_handler;
 
-			int r = sigaction(signals[i], &action, 0);
+			int r = sigaction(posix_signals[i], &action, 0);
 			if (r < 0) success = false;
 		}
 
