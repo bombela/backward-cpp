@@ -186,6 +186,15 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 #	include <signal.h>
 
 #	if BACKWARD_HAS_BFD == 1
+//              NOTE: defining PACKAGE{,_VERSION} is required before including
+//                    bfd.h on some platforms, see also:
+//                    https://sourceware.org/bugzilla/show_bug.cgi?id=14243
+#               ifndef PACKAGE
+#                       define PACKAGE
+#               endif
+#               ifndef PACKAGE_VERSION
+#                       define PACKAGE_VERSION
+#               endif
 #		include <bfd.h>
 #		ifndef _GNU_SOURCE
 #			define _GNU_SOURCE
