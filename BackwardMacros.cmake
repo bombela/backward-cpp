@@ -111,7 +111,7 @@ foreach(def ${BACKWARD_DEFINITIONS})
 	message(STATUS "${def}")
 endforeach()
 
-LIST(APPEND BACKWARD_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR})
+LIST(APPEND BACKWARD_INCLUDE_DIRS ${CMAKE_CURRENT_LIST_DIR})
 
 macro(add_backward target)
 	target_include_directories(${target} PRIVATE ${BACKWARD_INCLUDE_DIRS})
