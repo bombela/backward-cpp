@@ -47,9 +47,10 @@ if (${STACK_DETAILS_AUTO_DETECT})
 
 	# find libdw
 	find_path(LIBDW_INCLUDE_DIR NAMES "elfutils/libdw.h" "elfutils/libdwfl.h")
-	find_library(LIBDW_LIBRARY dw)
+	find_library(LIBDW_LIBRARY dw PATHS "/usr/lib/x86_64-linux-gnu/")
 	set(LIBDW_INCLUDE_DIRS ${LIBDW_INCLUDE_DIR} )
 	set(LIBDW_LIBRARIES ${LIBDW_LIBRARY} )
+	
 	find_package_handle_standard_args(libdw DEFAULT_MSG
 		LIBDW_LIBRARY LIBDW_INCLUDE_DIR)
 	mark_as_advanced(LIBDW_INCLUDE_DIR LIBDW_LIBRARY)
@@ -57,8 +58,8 @@ if (${STACK_DETAILS_AUTO_DETECT})
 	# find libbfd
 	find_path(LIBBFD_INCLUDE_DIR NAMES "bfd.h")
 	find_path(LIBDL_INCLUDE_DIR NAMES "dlfcn.h")
-	find_library(LIBBFD_LIBRARY bfd)
-	find_library(LIBDL_LIBRARY dl)
+	find_library(LIBBFD_LIBRARY bfd PATHS "/usr/lib/x86_64-linux-gnu/")
+	find_library(LIBDL_LIBRARY dl PATHS "/usr/lib/x86_64-linux-gnu/")
 	set(LIBBFD_INCLUDE_DIRS ${LIBBFD_INCLUDE_DIR} ${LIBDL_INCLUDE_DIR})
 	set(LIBBFD_LIBRARIES ${LIBBFD_LIBRARY} ${LIBDL_LIBRARY})
 	find_package_handle_standard_args(libbfd DEFAULT_MSG
