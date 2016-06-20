@@ -22,6 +22,7 @@
 
 cmake_minimum_required(VERSION 2.8.12)
 project(backward CXX)
+set(PROJECT_VERSION 0.1)
 
 include(BackwardMacros.cmake)
 
@@ -38,12 +39,21 @@ endif()
 # BACKWARD OBJECT
 ###############################################################################
 
+configure_file(backward_config.hpp.in backward_config.hpp @ONLY)
+configure_file(backward.pc.in backward.pc @ONLY)
+
+include_directories(${CMAKE_BINARY_DIR})
+
 add_library(backward_object OBJECT backward.cpp)
 target_compile_definitions(backward_object PRIVATE ${BACKWARD_DEFINITIONS})
 target_include_directories(backward_object PRIVATE ${BACKWARD_INCLUDE_DIRS})
 set(BACKWARD_ENABLE $<TARGET_OBJECTS:backward_object> CACHE STRING
 	"Link with this object to setup backward automatically")
 
+
+install (FILES backward.hpp backward_config.hpp DESTINATION include/backward)
+# install (TARGETS backward_object DESTINATION lib)
+install(FILES ${CMAKE_BINARY_DIR}/backward.pc DESTINATION lib/pkgconfig)
 
 ###############################################################################
 # TESTS
