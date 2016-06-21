@@ -51,7 +51,7 @@ set(BACKWARD_ENABLE $<TARGET_OBJECTS:backward_object> CACHE STRING
 	"Link with this object to setup backward automatically")
 
 
-install (FILES backward.hpp backward_config.hpp DESTINATION include/backward)
+install (FILES backward.hpp ${CMAKE_BINARY_DIR}/backward_config.hpp DESTINATION include/backward)
 # install (TARGETS backward_object DESTINATION lib)
 install(FILES ${CMAKE_BINARY_DIR}/backward.pc DESTINATION lib/pkgconfig)
 
