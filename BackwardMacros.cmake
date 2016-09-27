@@ -104,8 +104,10 @@ macro(map_definitions var_prefix define_prefix)
 	endforeach()
 endmacro()
 
-map_definitions("STACK_WALKING_" "BACKWARD_HAS_" UNWIND BACKTRACE)
-map_definitions("STACK_DETAILS_" "BACKWARD_HAS_" BACKTRACE_SYMBOL DW BFD)
+if (NOT BACKWARD_DEFINITIONS)
+	map_definitions("STACK_WALKING_" "BACKWARD_HAS_" UNWIND BACKTRACE)
+	map_definitions("STACK_DETAILS_" "BACKWARD_HAS_" BACKTRACE_SYMBOL DW BFD)
+endif()
 
 foreach(def ${BACKWARD_DEFINITIONS})
 	message(STATUS "${def}")
