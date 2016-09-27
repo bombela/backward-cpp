@@ -49,10 +49,10 @@ you the trouble, you can easily integrate Backward:
 add_subdirectory(/path/to/backward-cpp)
 
 # This will add backward.cpp to your target
-add_executable(myproject mysource.cpp ${backward_ENABLE})
+add_executable(mytarget mysource.cpp ${BACKWARD_ENABLE})
 
 # This will add libraries, definitions and include directories needed by backward
-add_backward(myproject)
+add_backward(mytarget)
 ```
 
 ### Compile with debug info
