@@ -61,6 +61,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <algorithm>
 #include <cstdlib>
 #include <cstdio>
@@ -1673,19 +1674,23 @@ namespace Color {
 
 class Colorize {
 public:
-	Colorize(std::FILE* os):
-		_os(os), _reset(false), _istty(false) {}
+	Colorize(std::ostream& os):
+		_os(os), _reset(false), _use_colors(false) {}
 
-	void init() {
-		_istty = isatty(fileno(_os));
+	void activate() {
+		_use_colors = true;
+	}
+
+	void activate_if_tty(std::FILE *desc) {
+		_use_colors = isatty(fileno(desc));
 	}
 
 	void set_color(Color::type ccode) {
-		if (!_istty) return;
+		if (!_use_colors) return;
 
 		// I assume that the terminal can handle basic colors. Seriously I
 		// don't want to deal with all the termcap shit.
-		fprintf(_os, "\033[%im", static_cast<int>(ccode));
+		_os << "\033[" << static_cast<int>(ccode) << "m";
 		_reset = (ccode != Color::reset);
 	}
 
@@ -1696,9 +1701,9 @@ public:
 	}
 
 private:
-	std::FILE* _os;
-	bool       _reset;
-	bool       _istty;
+	std::ostream& _os;
+	bool _reset;
+	bool _use_colors;
 };
 
 #else // ndef BACKWARD_SYSTEM_LINUX
@@ -1714,8 +1719,9 @@ namespace Color {
 
 class Colorize {
 public:
-	Colorize(std::FILE*) {}
-	void init() {}
+	Colorize(std::ostream&) {}
+	void activate() {}
+	void activate_if_tty() {}
 	void set_color(Color::type) {}
 };
 
@@ -1737,59 +1743,97 @@ public:
 
 	template <typename ST>
 		FILE* print(ST& st, FILE* os = stderr) {
+			std::stringstream ss;
+			Colorize colorize(ss);
+			if (color) {
+				colorize.activate_if_tty(os);
+			}
+			print(st, ss, colorize);
+			fprintf(os, "%s", ss.str().c_str());
+			return os;
+		}
+
+	template <typename ST>
+		void print(ST& st, std::ostream& os) {
 			Colorize colorize(os);
 			if (color) {
-				colorize.init();
+				colorize.activate();
 			}
+			print(st, os, colorize);
+		}
+
+	template <typename IT>
+		FILE* print(IT begin, IT end, FILE* os = stderr, size_t thread_id = 0) {
+			std::stringstream ss;
+			Colorize colorize(ss);
+			if (color) {
+				colorize.activate_if_tty(os);
+			}
+			print(begin, end, ss, thread_id, colorize);
+			fprintf(os, "%s", ss.str().c_str());
+			return os;
+		}
+
+	template <typename IT>
+		void print(IT begin, IT end, std::ostream& os, size_t thread_id = 0) {
+			Colorize colorize(os);
+			if (color) {
+				colorize.activate();
+			}
+			print(begin, end, os, thread_id, colorize);
+		}
+
+private:
+	TraceResolver  _resolver;
+	SnippetFactory _snippets;
+
+	template <typename ST>
+		void print(ST& st, std::ostream& os, Colorize& colorize) {
 			print_header(os, st.thread_id());
 			_resolver.load_stacktrace(st);
 			for (size_t trace_idx = st.size(); trace_idx > 0; --trace_idx) {
 				print_trace(os, _resolver.resolve(st[trace_idx-1]), colorize);
 			}
-			return os;
 		}
 
 	template <typename IT>
-		FILE* print(IT begin, IT end, FILE* os = stderr, size_t thread_id = 0) {
-			Colorize colorize(os);
-			if (color) {
-				colorize.init();
-			}
+		void print(IT begin, IT end, std::ostream& os, size_t thread_id, Colorize& colorize) {
 			print_header(os, thread_id);
 			for (; begin != end; ++begin) {
 				print_trace(os, *begin, colorize);
 			}
-			return os;
 		}
-private:
-	TraceResolver  _resolver;
-	SnippetFactory _snippets;
 
-	void print_header(FILE* os, unsigned thread_id) {
-		fprintf(os, "Stack trace (most recent call last)");
+	void print_header(std::ostream& os, unsigned thread_id) {
+		os << "Stack trace (most recent call last)";
 		if (thread_id) {
-			fprintf(os, " in thread %u:\n", thread_id);
-		} else {
-			fprintf(os, ":\n");
+			os << " in thread " << thread_id;
 		}
+		os << ":\n";
 	}
 
-	void print_trace(FILE* os, const ResolvedTrace& trace,
+	void print_trace(std::ostream& os, const ResolvedTrace& trace,
 			Colorize& colorize) {
-		fprintf(os, "#%-2u", trace.idx);
+		os << "#"
+		   << std::left << std::setw(2) << trace.idx
+		   << std::right;
 		bool already_indented = true;
 
 		if (!trace.source.filename.size() || object) {
-			fprintf(os, "   Object \"%s\", at %p, in %s\n",
-					trace.object_filename.c_str(), trace.addr,
-					trace.object_function.c_str());
+			os << "   Object \""
+			   << trace.object_filename
+			   << ", at "
+			   << trace.addr
+			   << ", in "
+			   << trace.object_function
+			   << "\n";
 			already_indented = false;
 		}
 
 		for (size_t inliner_idx = trace.inliners.size();
 				inliner_idx > 0; --inliner_idx) {
 			if (!already_indented) {
-				fprintf(os, "   ");
+				os << "   ";
 			}
 			const ResolvedTrace::SourceLoc& inliner_loc
 				= trace.inliners[inliner_idx-1];
@@ -1803,7 +1847,7 @@ private:
 
 		if (trace.source.filename.size()) {
 			if (!already_indented) {
-				fprintf(os, "   ");
+				os << "   ";
 			}
 			print_source_loc(os, "   ", trace.source, trace.addr);
 			if (snippet) {
@@ -1813,7 +1857,7 @@ private:
 		}
 	}
 
-	void print_snippet(FILE* os, const char* indent,
+	void print_snippet(std::ostream& os, const char* indent,
 			const ResolvedTrace::SourceLoc& source_loc,
 			Colorize& colorize, Color::type color_code,
 			int context_size)
@@ -1828,29 +1872,35 @@ private:
 				it != lines.end(); ++it) {
 			if (it-> first == source_loc.line) {
 				colorize.set_color(color_code);
-				fprintf(os, "%s>", indent);
+				os << indent << ">";
 			} else {
-				fprintf(os, "%s ", indent);
+				os << indent << " ";
 			}
-			fprintf(os, "%4u: %s\n", it->first, it->second.c_str());
+			os << std::setw(4) << it->first
+			   << ": "
+			   << it->second
+			   << "\n";
 			if (it-> first == source_loc.line) {
 				colorize.set_color(Color::reset);
 			}
 		}
 	}
 
-	void print_source_loc(FILE* os, const char* indent,
+	void print_source_loc(std::ostream& os, const char* indent,
 			const ResolvedTrace::SourceLoc& source_loc,
 			void* addr=0) {
-		fprintf(os, "%sSource \"%s\", line %i, in %s",
-				indent, source_loc.filename.c_str(), (int)source_loc.line,
-				source_loc.function.c_str());
+		os << indent
+		   << "Source \""
+		   << source_loc.filename
+		   << "\", line "
+		   << source_loc.line
+		   << ", in "
+		   << source_loc.function;
 
 		if (address && addr != 0) {
-			fprintf(os, " [%p]\n", addr);
-		} else {
-			fprintf(os, "\n");
+			os << " [" << addr << "]";
 		}
+		os << "\n";
 	}
 };
 
