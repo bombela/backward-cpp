@@ -1679,10 +1679,14 @@ public:
 
 	void activate() {
 		_use_colors = true;
+		// in a colorful environment, reset at the beginning
+		set_color(Color::reset);
 	}
 
 	void activate_if_tty(std::FILE *desc) {
-		_use_colors = isatty(fileno(desc));
+		if (isatty(fileno(desc))) {
+			activate();
+		}
 	}
 
 	void set_color(Color::type ccode) {
