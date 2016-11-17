@@ -89,3 +89,12 @@ if(BACKWARD_TESTS)
 		backward_add_test(test/${test}.cpp ${BACKWARD_ENABLE})
 	endforeach()
 endif()
+
+install(
+    FILES "backward.hpp"
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/include
+)
+install(
+    FILES "BackwardConfig.cmake"
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/backward
+)
