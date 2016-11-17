@@ -24,6 +24,8 @@
 #ifndef H_6B9572DA_A64B_49E6_B234_051480991C89
 #define H_6B9572DA_A64B_49E6_B234_051480991C89
 
+#include "backward_config.hpp"
+
 #ifndef __cplusplus
 #	error "It's not going to compile without a C++ compiler..."
 #endif
