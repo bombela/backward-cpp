@@ -113,7 +113,7 @@ foreach(def ${BACKWARD_DEFINITIONS})
 	message(STATUS "${def}")
 endforeach()
 
-find_path(BACKWARD_INCLUDE_DIR backward.hpp)
+find_path(BACKWARD_INCLUDE_DIR backward.hpp PATHS ${CMAKE_CURRENT_LIST_DIR})
 list(APPEND BACKWARD_INCLUDE_DIRS ${BACKWARD_INCLUDE_DIR})
 
 include(FindPackageHandleStandardArgs)

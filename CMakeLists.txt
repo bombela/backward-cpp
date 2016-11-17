@@ -23,7 +23,7 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(backward CXX)
 
-find_package(Backward REQUIRED PATHS ${CMAKE_CURRENT_LIST_DIR})
+include(BackwardConfig.cmake)
 
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_STANDARD 11)
