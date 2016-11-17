@@ -1727,12 +1727,16 @@ public:
 	bool color;
 	bool address;
 	bool object;
+	int inliner_context_size;
+	int trace_context_size;
 
 	Printer():
 		snippet(true),
 		color(true),
 		address(false),
-		object(false)
+		object(false),
+		inliner_context_size(5),
+		trace_context_size(7)
 		{}
 
 	template <typename ST>
@@ -1796,7 +1800,7 @@ private:
 			print_source_loc(os, " | ", inliner_loc);
 			if (snippet) {
 				print_snippet(os, "    | ", inliner_loc,
-						colorize, Color::purple, 5);
+						colorize, Color::purple, inliner_context_size);
 			}
 			already_indented = false;
 		}
@@ -1808,7 +1812,7 @@ private:
 			print_source_loc(os, "   ", trace.source, trace.addr);
 			if (snippet) {
 				print_snippet(os, "      ", trace.source,
-						colorize, Color::yellow, 7);
+						colorize, Color::yellow, trace_context_size);
 			}
 		}
 	}
