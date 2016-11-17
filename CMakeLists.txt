@@ -23,7 +23,10 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(backward CXX)
 
-include(BackwardMacros.cmake)
+find_package(Backward REQUIRED PATHS ${CMAKE_CURRENT_LIST_DIR})
+
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_STANDARD 11)
 
 ###############################################################################
 # COMPILER FLAGS
@@ -60,12 +63,8 @@ if(BACKWARD_TESTS)
 
 		add_executable(${test_name} ${src} ${ARGN})
 
-		set_target_properties(${test_name} PROPERTIES
-			COMPILE_DEFINITIONS "${BACKWARD_DEFINITIONS}")
+		target_link_libraries(${test_name} PRIVATE Backward::Backward test_main)
 
-		target_include_directories(${test_name} PRIVATE ${BACKWARD_INCLUDE_DIRS})
-
-		target_link_libraries(${test_name} ${BACKWARD_LIBRARIES} test_main)
 		add_test(NAME ${name} COMMAND ${test_name})
 	endmacro()
 

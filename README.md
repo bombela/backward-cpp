@@ -45,13 +45,16 @@ doing at your convenience.
 
 If you are using CMake and want to use its configuration abilities to save
 you the trouble, you can easily integrate Backward:
-```
-add_subdirectory(/path/to/backward-cpp)
 
-# This will add backward.cpp to your target
-add_executable(mytarget mysource.cpp ${BACKWARD_ENABLE})
+```
+find_package(Backward)
 
 # This will add libraries, definitions and include directories needed by backward
+# through an IMPORTED target.
+target_link_libraries(mytarget Backward::Backward)
+
+# This will add libraries, definitions and include directories needed by backward
+# by setting each property on the target.
 add_backward(mytarget)
 ```
 
