@@ -44,7 +44,14 @@ doing at your convenience.
 ### Integration with CMake
 
 If you are using CMake and want to use its configuration abilities to save
-you the trouble, you can easily integrate Backward:
+you the trouble, you can easily integrate Backward, depending on how you obtained
+the library.
+
+#### As a subdirectory:
+
+In this case you have a subdirectory containing the whole repository of Backward
+(eg.: using git-submodules), in this case you can do:
+
 ```
 add_subdirectory(/path/to/backward-cpp)
 
@@ -52,7 +59,39 @@ add_subdirectory(/path/to/backward-cpp)
 add_executable(mytarget mysource.cpp ${BACKWARD_ENABLE})
 
 # This will add libraries, definitions and include directories needed by backward
+# by setting each property on the target.
 add_backward(mytarget)
+```
+
+#### Modifying CMAKE_MODULE_PATH
+
+In this case you can have Backward installed as a subdirectory:
+
+```
+list(APPEND CMAKE_MODULE_PATH /path/to/backward-cpp)
+find_package(Backward)
+
+# This will add libraries, definitions and include directories needed by backward
+# through an IMPORTED target.
+target_link_libraries(mytarget PUBLIC Backward::Backward)
+```
+
+Notice that this is equivalent to using the the approach that uses `add_subdirectory()`,
+however it uses cmake's [imported target](https://cmake.org/Wiki/CMake/Tutorials/Exporting_and_Importing_Targets) mechanism.
+
+#### Installation through a regular package manager
+
+In this case you have obtained Backward through a package manager.
+
+Packages currently available:
+- [conda-forge](https://anaconda.org/conda-forge/backward-cpp)
+
+```
+find_package(Backward)
+
+# This will add libraries, definitions and include directories needed by backward
+# through an IMPORTED target.
+target_link_libraries(mytarget PUBLIC Backward::Backward)
 ```
 
 ### Compile with debug info
@@ -61,7 +100,7 @@ You need to compile your project with generation of debug symbols enabled,
 usually `-g` with clang++ and g++.
 
 Note that you can use `-g` with any level of optimization, with modern debug
-information encoding like DWARF, it only takes space in the binary (it'ss not
+information encoding like DWARF, it only takes space in the binary (it's not
 loaded in memory until your debugger or Backward makes use of it, don't worry),
 and it doesn't impact the code generation (at least on GNU/Linux x86\_64 for
 what I know).
