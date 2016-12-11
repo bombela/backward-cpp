@@ -14,6 +14,7 @@ install:
   - CMAKE_URL="http://www.cmake.org/files/v3.3/cmake-3.3.2-Linux-x86_64.tar.gz"
   - mkdir cmake && travis_retry wget --no-check-certificate --quiet -O - ${CMAKE_URL} | tar --strip-components=1 -xz -C cmake
   - export PATH=${DEPS_DIR}/cmake/bin:${PATH}
+  - pip install --user conan && export PATH=$PATH:$HOME/.local/bin
   - cd ${TRAVIS_BUILD_DIR}
   - mkdir build && cd build
   - cmake .. -DBACKWARD_TESTS=ON
@@ -21,3 +22,4 @@ install:
 
 script:
   - valgrind ctest .. --verbose
+  - cd ${TRAVIS_BUILD_DIR} && conan test_package --build=outdated
