@@ -1,6 +1,7 @@
 #include <backward/backward.hpp>
 #include <iostream>
 #include <stdexcept>
+#include <sstream>
 
 using namespace backward;
 
@@ -8,7 +9,7 @@ class TracedException : public std::runtime_error
 {
 public:
     TracedException() :
-        std::runtime_error{_get_trace()}
+        std::runtime_error(_get_trace())
     {}
 
 private:
@@ -36,7 +37,7 @@ void f(int i)
 {
     if(i >= 42)
     {
-        throw TracedException{};
+        throw TracedException();
     }
     else
     {
