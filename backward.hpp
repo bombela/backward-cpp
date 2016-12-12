@@ -1951,6 +1951,8 @@ private:
 		error_addr = reinterpret_cast<void*>(uctx->uc_mcontext.gregs[REG_EIP]);
 #elif defined(__arm__)
 		error_addr = reinterpret_cast<void*>(uctx->uc_mcontext.arm_pc);
+#elif defined(__ppc__) || defined(__powerpc) || defined(__powerpc__) || defined(__POWERPC__)
+		error_addr = reinterpret_cast<void*>(uctx->uc_mcontext.regs->nip);
 #else
 #	warning ":/ sorry, ain't know no nothing none not of your architecture!"
 #endif
