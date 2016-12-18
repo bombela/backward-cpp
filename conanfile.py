@@ -6,7 +6,7 @@ class BackwardCpp(ConanFile):
     name = 'backward'
     url = 'https:77github.com/Manu343726/backward-cpp'
     license = 'MIT'
-    version = '0.0.0'
+    version = '1.3.0'
     options = {
         'stack_walking_unwind': [True, False],
         'stack_walking_backtrace': [True, False],

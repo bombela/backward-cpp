@@ -3,7 +3,7 @@ import os
 
 class TestBackward(ConanFile):
     settings = 'os', 'compiler', 'build_type', 'arch'
-    requires = 'cmake-utils/0.0.0@Manu343726/testing', 'backward/0.0.0@Manu343726/testing'
+    requires = 'cmake-utils/0.0.0@Manu343726/testing', 'backward/1.3.0@Manu343726/testing'
     generators = 'cmake'
 
     def build(self):
