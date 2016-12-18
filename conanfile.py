@@ -4,7 +4,7 @@ import os
 class BackwardCpp(ConanFile):
     settings = 'os', 'compiler', 'build_type', 'arch'
     name = 'backward'
-    url = 'https:77github.com/Manu343726/backward-cpp'
+    url = 'https://github.com/bombela/backward-cpp'
     license = 'MIT'
     version = '1.3.0'
     options = {
