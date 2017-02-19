@@ -35,13 +35,6 @@ class BackwardCpp(ConanFile):
         cmake = CMake(self.settings)
 
         options = ''
-        options += self.cmake_option('stack_walking_unwind')
-        options += self.cmake_option('stack_walking_backtrace')
-        options += self.cmake_option('stack_details_auto_detect')
-        options += self.cmake_option('stack_details_backtrace_symbol')
-        options += self.cmake_option('stack_details_dw')
-        options += self.cmake_option('stack_details_bfd')
-        options += self.cmake_option('shared', prefix = 'BACKWARD_')
 
         self.run('cmake {} {} {} -DBACKWARD_TESTS=OFF'.format(self.conanfile_directory, cmake.command_line, options))
         self.run('cmake --build . {}'.format(cmake.build_config))
