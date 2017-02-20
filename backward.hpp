@@ -1349,7 +1349,7 @@ private:
 		Dwarf_Addr low, high;
 
 		// continuous range
-		if (dwarf_hasattr(die, DW_AT_low_pc) and
+		if (dwarf_hasattr(die, DW_AT_low_pc) &&
 							dwarf_hasattr(die, DW_AT_high_pc)) {
 			if (dwarf_lowpc(die, &low) != 0) {
 				return false;
