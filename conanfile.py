@@ -29,7 +29,7 @@ class BackwardCpp(ConanFile):
     generators = 'cmake'
 
     def cmake_option(self, option, prefix = ''):
-        return '-D{}{}={}'.format(prefix, option.upper(), self.options[option])
+        return '-D{}{}={}'.format(prefix, option.upper(), getattr(self.options, option))
 
     def build(self):
         cmake = CMake(self.settings)
