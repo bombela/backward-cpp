@@ -1940,6 +1940,9 @@ private:
 	details::handle<char*> _stack_content;
 	bool                   _loaded;
 
+#ifdef __GNUC__
+	__attribute__((noreturn))
+#endif
 	static void sig_handler(int, siginfo_t* info, void* _ctx) {
 		ucontext_t *uctx = (ucontext_t*) _ctx;
 
