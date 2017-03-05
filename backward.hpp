@@ -434,8 +434,8 @@ struct Trace {
 	Trace():
 		addr(0), idx(0) {}
 
-	explicit Trace(void* addr, size_t idx):
-		addr(addr), idx(idx) {}
+	explicit Trace(void* _addr, size_t _idx):
+		addr(_addr), idx(_idx) {}
 };
 
 struct ResolvedTrace: public Trace {
@@ -637,7 +637,7 @@ public:
 private:
 	struct callback {
 		StackTraceImpl& self;
-		callback(StackTraceImpl& self): self(self) {}
+		callback(StackTraceImpl& _self): self(_self) {}
 
 		void operator()(size_t idx, void* addr) {
 			self._stacktrace[idx] = addr;
