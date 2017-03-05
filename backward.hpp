@@ -1391,23 +1391,22 @@ private:
 					if (die_has_pc(die, pc)) {
 						return result;
 					}
-				default:
-					bool declaration = false;
-					Dwarf_Attribute attr_mem;
-					dwarf_formflag(dwarf_attr(die, DW_AT_declaration,
-								&attr_mem), &declaration);
-					if (!declaration) {
-						// let's be curious and look deeper in the tree,
-						// function are not necessarily at the first level, but
-						// might be nested inside a namespace, structure etc.
-						Dwarf_Die die_mem;
-						Dwarf_Die* indie = find_fundie_by_pc(die, pc, &die_mem);
-						if (indie) {
-							*result = die_mem;
-							return result;
-						}
-					}
 			};
+			bool declaration = false;
+			Dwarf_Attribute attr_mem;
+			dwarf_formflag(dwarf_attr(die, DW_AT_declaration,
+						&attr_mem), &declaration);
+			if (!declaration) {
+				// let's be curious and look deeper in the tree,
+				// function are not necessarily at the first level, but
+				// might be nested inside a namespace, structure etc.
+				Dwarf_Die die_mem;
+				Dwarf_Die* indie = find_fundie_by_pc(die, pc, &die_mem);
+				if (indie) {
+					*result = die_mem;
+					return result;
+				}
+			}
 		} while (dwarf_siblingof(die, result) == 0);
 		return 0;
 	}
