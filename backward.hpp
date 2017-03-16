@@ -1882,7 +1882,6 @@ public:
 		SIGUNUSED,  // Synonymous with SIGSYS
 		SIGXCPU,    // CPU time limit exceeded (4.2BSD)
 		SIGXFSZ,    // File size limit exceeded (4.2BSD)
-
 	};
         return std::vector<int>(posix_signals, posix_signals + sizeof posix_signals / sizeof posix_signals[0] );
    }

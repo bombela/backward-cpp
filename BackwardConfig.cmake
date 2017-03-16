@@ -39,6 +39,8 @@ set(STACK_DETAILS_DW FALSE CACHE BOOL
 set(STACK_DETAILS_BFD FALSE CACHE BOOL
 	"Use libbfd to read debug info")
 
+set(BACKWARD_TESTS FALSE CACHE BOOL "Enable tests")
+
 ###############################################################################
 # CONFIGS
 ###############################################################################
