@@ -1869,33 +1869,20 @@ class SignalHandling {
 public:
    static std::vector<int> make_default_signals() {
        const int posix_signals[] = {
-		// default action: Core
-		SIGILL,
-		SIGABRT,
-		SIGFPE,
-		SIGSEGV,
-		SIGBUS,
-		// I am not sure the following signals should be enabled by
-		// default:
-		// default action: Term
-		SIGHUP,
-		SIGINT,
-		SIGPIPE,
-		SIGALRM,
-		SIGTERM,
-		SIGUSR1,
-		SIGUSR2,
-		SIGPOLL,
-		SIGPROF,
-		SIGVTALRM,
-		SIGIO,
-		SIGPWR,
-		// default action: Core
-		SIGQUIT,
-		SIGSYS,
-		SIGTRAP,
-		SIGXCPU,
-		SIGXFSZ
+		// Signals for which the default action is "Core".
+		SIGABRT,    // Abort signal from abort(3)
+		SIGBUS,     // Bus error (bad memory access)
+		SIGFPE,     // Floating point exception
+		SIGILL,     // Illegal Instruction
+		SIGIOT,     // IOT trap. A synonym for SIGABRT
+		SIGQUIT,    // Quit from keyboard
+		SIGSEGV,    // Invalid memory reference
+		SIGSYS,     // Bad argument to routine (SVr4)
+		SIGTRAP,    // Trace/breakpoint trap
+		SIGUNUSED,  // Synonymous with SIGSYS
+		SIGXCPU,    // CPU time limit exceeded (4.2BSD)
+		SIGXFSZ,    // File size limit exceeded (4.2BSD)
+
 	};
         return std::vector<int>(posix_signals, posix_signals + sizeof posix_signals / sizeof posix_signals[0] );
    }
