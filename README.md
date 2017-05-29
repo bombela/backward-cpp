@@ -267,7 +267,7 @@ using namespace backward;
 StackTrace st; st.load_here(32);
 Printer p;
 p.object = true;
-p.color = false;
+p.color_mode = ColorMode::always;
 p.address = true;
 p.print(st, stderr);
 ```
@@ -279,21 +279,29 @@ class Printer { public:
 	// Print a little snippet of code if possible.
 	bool snippet = true;
 
-	// Colorize the trace (only set a color when printing on a terminal)
-	bool color = true;
+	// Colorize the trace
+	//  - ColorMode::automatic: Activate colors if possible. For example, when using a TTY on linux.
+	//  - ColorMode::always: Always use colors.
+	//  - ColorMode::never: Never use colors.
+	bool color_mode = ColorMode::automatic;
 
 	// Add the addresses of every source location to the trace.
 	bool address = false;
 
-	// Even if there is a source location, prints the object the trace comes
-	// from as well.
+	// Even if there is a source location, also prints the object
+	// from where the trace came from.
 	bool object = false;
 
-	// Resolve and print a stack trace. It takes a C FILE* object, only because
-	// it is possible to access the underalying OS-level file descriptor, which
-	// is then used to determine if the output is a terminal to print in color.
+	// Resolve and print a stack trace to the given C FILE* object.
+	// On linux, if the FILE* object is attached to a TTY,
+	// color will be used if color_mode is set to automatic.
 	template <typename StackTrace>
-		FILE* print(StackTrace& st, FILE* os = stderr)
+		FILE* print(StackTrace& st, FILE* fp = stderr);
+
+	// Resolve and print a stack trace to the given std::ostream object.
+	// Color will only be used if color_mode is set to always. 
+	template <typename ST>
+		std::ostream& print(ST& st, std::ostream& os);
 ```
 
 
@@ -369,7 +377,7 @@ struct ResolvedTrace: public Trace {
 
 François-Xavier Bourlet <bombela@gmail.com>
 
-Copyright 2013 Google Inc. All Rights Reserved.
+Copyright 2013-2017 Google Inc. All Rights Reserved.
 MIT License.
 
 ### Disclaimer
