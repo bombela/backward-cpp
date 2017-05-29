@@ -23,6 +23,7 @@
 
 #include "backward.hpp"
 
+#include <signal.h>
 #include <stdio.h>
 #include "test/test.hpp"
 

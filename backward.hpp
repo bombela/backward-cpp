@@ -59,17 +59,18 @@
 #	endif
 #endif
 
-#include <fstream>
-#include <iostream>
-#include <sstream>
 #include <algorithm>
-#include <cstdlib>
-#include <cstdio>
-#include <cstring>
 #include <cctype>
-#include <string>
-#include <new>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
 #include <iomanip>
+#include <iostream>
+#include <new>
+#include <sstream>
+#include <streambuf>
+#include <string>
 #include <vector>
 
 #if defined(BACKWARD_SYSTEM_LINUX)
@@ -1663,6 +1664,44 @@ private:
 
 /*************** PRINTER ***************/
 
+namespace ColorMode {
+	enum type {
+		automatic,
+		never,
+		always
+	};
+}
+
+class cfile_streambuf: public std::streambuf {
+public:
+	cfile_streambuf(FILE *sink): sink(sink) {}
+	int_type underflow() { return traits_type::eof(); }
+	int_type overflow(int_type ch) {
+		if (traits_type::not_eof(ch) && fwrite(&ch, sizeof ch, 1, sink) == 1) {
+				return ch;
+		}
+		return traits_type::eof();
+	}
+
+	std::streamsize xsputn(const char_type* s, std::streamsize count) {
+		return fwrite(s, sizeof *s, count, sink);
+	}
+
+#ifdef BACKWARD_ATLEAST_CXX11
+public:
+	cfile_streambuf(const cfile_streambuf&) = delete;
+	cfile_streambuf& operator=(const cfile_streambuf&) = delete;
+#else
+private:
+	cfile_streambuf(const cfile_streambuf &);
+	cfile_streambuf &operator= (const cfile_streambuf &);
+#endif
+
+private:
+	FILE *sink;
+	std::vector<char> buffer;
+};
+
 #ifdef BACKWARD_SYSTEM_LINUX
 
 namespace Color {
@@ -1676,22 +1715,18 @@ namespace Color {
 class Colorize {
 public:
 	Colorize(std::ostream& os):
-		_os(os), _reset(false), _use_colors(false) {}
+		_os(os), _reset(false), _enabled(false) {}
 
-	void activate() {
-		_use_colors = true;
-		// in a colorful environment, reset at the beginning
-		set_color(Color::reset);
+	void activate(ColorMode::type mode) {
+		_enabled = mode == ColorMode::always;
 	}
 
-	void activate_if_tty(std::FILE *desc) {
-		if (isatty(fileno(desc))) {
-			activate();
-		}
+	void activate(ColorMode::type mode, FILE* fp) {
+		activate(mode, fileno(fp));
 	}
 
 	void set_color(Color::type ccode) {
-		if (!_use_colors) return;
+		if (!_enabled) return;
 
 		// I assume that the terminal can handle basic colors. Seriously I
 		// don't want to deal with all the termcap shit.
@@ -1706,13 +1741,16 @@ public:
 	}
 
 private:
+	void activate(ColorMode::type mode, int fd) {
+		activate(mode == ColorMode::automatic && isatty(fd) ? ColorMode::always : mode);
+	}
+
 	std::ostream& _os;
-	bool _reset;
-	bool _use_colors;
+	bool          _reset;
+	bool          _enabled;
 };
 
 #else // ndef BACKWARD_SYSTEM_LINUX
-
 
 namespace Color {
 	enum type {
@@ -1725,8 +1763,8 @@ namespace Color {
 class Colorize {
 public:
 	Colorize(std::ostream&) {}
-	void activate() {}
-	void activate_if_tty() {}
+	void activate(ColorMode::type) {}
+	void activate(ColorMode::type, FILE*) {}
 	void set_color(Color::type) {}
 };
 
@@ -1734,8 +1772,9 @@ public:
 
 class Printer {
 public:
+
 	bool snippet;
-	bool color;
+	ColorMode::type color_mode;
 	bool address;
 	bool object;
 	int inliner_context_size;
@@ -1743,7 +1782,7 @@ public:
 
 	Printer():
 		snippet(true),
-		color(true),
+		color_mode(ColorMode::automatic),
 		address(false),
 		object(false),
 		inliner_context_size(5),
@@ -1751,45 +1790,39 @@ public:
 		{}
 
 	template <typename ST>
-		FILE* print(ST& st, FILE* os = stderr) {
-			std::stringstream ss;
-			Colorize colorize(ss);
-			if (color) {
-				colorize.activate_if_tty(os);
-			}
-			print(st, ss, colorize);
-			fprintf(os, "%s", ss.str().c_str());
-			return os;
+		FILE* print(ST& st, FILE* fp = stderr) {
+			cfile_streambuf obuf(fp);
+			std::ostream os(&obuf);
+			Colorize colorize(os);
+			colorize.activate(color_mode, fp);
+			print_stacktrace(st, os, colorize);
+			return fp;
 		}
 
 	template <typename ST>
-		void print(ST& st, std::ostream& os) {
+		std::ostream& print(ST& st, std::ostream& os) {
 			Colorize colorize(os);
-			if (color) {
-				colorize.activate();
-			}
-			print(st, os, colorize);
-		}
-
-	template <typename IT>
-		FILE* print(IT begin, IT end, FILE* os = stderr, size_t thread_id = 0) {
-			std::stringstream ss;
-			Colorize colorize(ss);
-			if (color) {
-				colorize.activate_if_tty(os);
-			}
-			print(begin, end, ss, thread_id, colorize);
-			fprintf(os, "%s", ss.str().c_str());
+			colorize.activate(color_mode);
+			print_stacktrace(st, os, colorize);
 			return os;
 		}
 
 	template <typename IT>
-		void print(IT begin, IT end, std::ostream& os, size_t thread_id = 0) {
+		FILE* print(IT begin, IT end, FILE* fp = stderr, size_t thread_id = 0) {
+			cfile_streambuf obuf(fp);
+			std::ostream os(&obuf);
 			Colorize colorize(os);
-			if (color) {
-				colorize.activate();
-			}
-			print(begin, end, os, thread_id, colorize);
+			colorize.activate(color_mode, fp);
+			print_stacktrace(begin, end, os, thread_id, colorize);
+			return fp;
+		}
+
+	template <typename IT>
+		std::ostream& print(IT begin, IT end, std::ostream& os, size_t thread_id = 0) {
+			Colorize colorize(os);
+			colorize.activate(color_mode);
+			print_stacktrace(begin, end, os, thread_id, colorize);
+			return os;
 		}
 
 private:
@@ -1797,7 +1830,7 @@ private:
 	SnippetFactory _snippets;
 
 	template <typename ST>
-		void print(ST& st, std::ostream& os, Colorize& colorize) {
+		void print_stacktrace(ST& st, std::ostream& os, Colorize& colorize) {
 			print_header(os, st.thread_id());
 			_resolver.load_stacktrace(st);
 			for (size_t trace_idx = st.size(); trace_idx > 0; --trace_idx) {
@@ -1806,7 +1839,7 @@ private:
 		}
 
 	template <typename IT>
-		void print(IT begin, IT end, std::ostream& os, size_t thread_id, Colorize& colorize) {
+		void print_stacktrace(IT begin, IT end, std::ostream& os, size_t thread_id, Colorize& colorize) {
 			print_header(os, thread_id);
 			for (; begin != end; ++begin) {
 				print_trace(os, *begin, colorize);
