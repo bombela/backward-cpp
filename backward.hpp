@@ -589,7 +589,7 @@ private:
 		if (!ip_before_instruction) {
 			// calculating 0-1 for unsigned, looks like a possible bug to sanitiziers, so let's do it explicitly:
 			if (ip==0) {
-				ip = std::numeric_limits<decltype(ip)>::max(); // set it to 0xffff... (as from casting 0-1)
+				ip = std::numeric_limits<uintptr_t>::max(); // set it to 0xffff... (as from casting 0-1)
 			} else {
 				ip -= 1; // else just normally decrement it (no overflow/underflow will happen)
 			}
