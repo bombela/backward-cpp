@@ -1674,7 +1674,7 @@ namespace ColorMode {
 
 class cfile_streambuf: public std::streambuf {
 public:
-	cfile_streambuf(FILE *sink): sink(sink) {}
+	cfile_streambuf(FILE *_sink): sink(_sink) {}
 	int_type underflow() { return traits_type::eof(); }
 	int_type overflow(int_type ch) {
 		if (traits_type::not_eof(ch) && fwrite(&ch, sizeof ch, 1, sink) == 1) {
