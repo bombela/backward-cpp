@@ -752,7 +752,16 @@ public:
 		while (*funcname && *funcname != '(') {
 			funcname += 1;
 		}
-		trace.object_filename.assign(filename, funcname++);
+		trace.object_filename.assign(filename, funcname); // it is ok if funcname is the ending \0, then we select string till end
+
+		if ( ! (*funcname) ) { // we already hit end of string. This happens for the last address 0xffff for ip==0
+			trace.object_function = "(none)";
+			trace.source.function = "(none)";
+			return trace;
+		}
+
+		// else normal string, we are at the opening '(' now
+		funcname++;
 		char* funcname_end = funcname;
 		while (*funcname_end && *funcname_end != ')' && *funcname_end != '+') {
 			funcname_end += 1;
