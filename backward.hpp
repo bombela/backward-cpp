@@ -755,7 +755,8 @@ public:
 		trace.object_filename.assign(filename, funcname); // ok even if funcname is the ending \0 (then we assign entire string)
 
 		if (*funcname) { // if it's not end of string (e.g. from last frame ip==0)
-			char* funcname_end = funcname + 1;
+			funcname += 1;
+			char* funcname_end = funcname;
 			while (*funcname_end && *funcname_end != ')' && *funcname_end != '+') {
 				funcname_end += 1;
 			}
