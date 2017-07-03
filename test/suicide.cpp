@@ -64,6 +64,8 @@ TEST_ABORT (calling_abort)
 	abort_abort_I_repeat_abort_abort();
 }
 
+// aarch64 does not trap Division by zero
+#ifndef __aarch64__
 volatile int zero = 0;
 
 int divide_by_zero()
@@ -78,6 +80,7 @@ TEST_DIVZERO (divide_by_zero)
 	int v = divide_by_zero();
 	std::cout << "v=" << v << std::endl;
 }
+#endif
 
 int bye_bye_stack(int i) {
 	return bye_bye_stack(i + 1) + bye_bye_stack(i * 2);
