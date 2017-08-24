@@ -24,10 +24,17 @@
 # OPTIONS
 ###############################################################################
 
+if (APPLE)
+set(STACK_WALKING_UNWIND FALSE CACHE BOOL
+	"Use compiler's unwind API")
+set(STACK_WALKING_BACKTRACE TRUE CACHE BOOL
+	"Use backtrace from (e)glibc for stack walking")
+else()
 set(STACK_WALKING_UNWIND TRUE CACHE BOOL
 	"Use compiler's unwind API")
 set(STACK_WALKING_BACKTRACE FALSE CACHE BOOL
 	"Use backtrace from (e)glibc for stack walking")
+endif()
 
 set(STACK_DETAILS_AUTO_DETECT TRUE CACHE BOOL
 	"Auto detect backward's stack details dependencies")

@@ -46,14 +46,20 @@
 // #define BACKWARD_SYSTEM_LINUX
 //	- specialization for linux
 //
+// #define BACKWARD_SYSTEM_DARWIN
+//	- specialization for Mac OS X 10.5 and later.
+//
 // #define BACKWARD_SYSTEM_UNKNOWN
 //	- placebo implementation, does nothing.
 //
 #if   defined(BACKWARD_SYSTEM_LINUX)
+#elif defined(BACKWARD_SYSTEM_DARWIN)
 #elif defined(BACKWARD_SYSTEM_UNKNOWN)
 #else
 #	if defined(__linux)
 #		define BACKWARD_SYSTEM_LINUX
+#	elif defined(__APPLE__)
+#		define BACKWARD_SYSTEM_DARWIN
 #	else
 #		define BACKWARD_SYSTEM_UNKNOWN
 #	endif
@@ -221,6 +227,43 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 
 #endif // defined(BACKWARD_SYSTEM_LINUX)
 
+#if defined(BACKWARD_SYSTEM_DARWIN)
+// On Darwin, backtrace can back-trace or "walk" the stack using the following
+// libraries:
+//
+// #define BACKWARD_HAS_BACKTRACE == 1
+//  - backtrace is available by default, though it does not produce as much information
+//  as another library might.
+//
+// The default is:
+// #define BACKWARD_HAS_BACKTRACE == 1
+#	define BACKWARD_HAS_BACKTRACE 1
+
+// On Darwin, backward can extract detailed information about a stack trace
+// using one of the following libraries:
+//
+// #define BACKWARD_HAS_BACKTRACE_SYMBOL 1
+//  - backtrace provides minimal details for a stack trace:
+//    - object filename
+//    - function name
+//
+// The default is:
+// #define BACKWARD_HAS_BACKTRACE_SYMBOL == 1
+//
+#	define BACKWARD_HAS_BACKTRACE_SYMBOL 1
+
+#	include <cxxabi.h>
+#	include <fcntl.h>
+#	include <pthread.h>
+#	include <sys/stat.h>
+#	include <unistd.h>
+#	include <signal.h>
+
+#	if (BACKWARD_HAS_BACKTRACE == 1) || (BACKWARD_HAS_BACKTRACE_SYMBOL == 1)
+#		include <execinfo.h>
+#	endif
+#endif // defined(BACKWARD_SYSTEM_DARWIN)
+
 #ifdef BACKWARD_ATLEAST_CXX11
 #	include <unordered_map>
 #	include <utility> // for std::swap
@@ -254,10 +297,13 @@ namespace backward {
 namespace system_tag {
 	struct linux_tag; // seems that I cannot call that "linux" because the name
 	// is already defined... so I am adding _tag everywhere.
+	struct darwin_tag;
 	struct unknown_tag;
 
 #if   defined(BACKWARD_SYSTEM_LINUX)
 	typedef linux_tag current_tag;
+#elif defined(BACKWARD_SYSTEM_DARWIN)
+	typedef darwin_tag current_tag;
 #elif defined(BACKWARD_SYSTEM_UNKNOWN)
 	typedef unknown_tag current_tag;
 #else
@@ -267,7 +313,7 @@ namespace system_tag {
 
 
 namespace trace_resolver_tag {
-#ifdef BACKWARD_SYSTEM_LINUX
+#if defined(BACKWARD_SYSTEM_LINUX)
 	struct libdw;
 	struct libbfd;
 	struct backtrace_symbol;
@@ -281,7 +327,15 @@ namespace trace_resolver_tag {
 #	else
 #		error "You shall not pass, until you know what you want."
 #	endif
-#endif // BACKWARD_SYSTEM_LINUX
+#elif defined(BACKWARD_SYSTEM_DARWIN)
+	struct backtrace_symbol;
+
+#	if BACKWARD_HAS_BACKTRACE_SYMBOL == 1
+	typedef backtrace_symbol current;
+#	else
+#		error "You shall not pass, until you know what you want."
+#	endif
+#endif
 } // namespace trace_resolver_tag
 
 
@@ -398,7 +452,7 @@ struct demangler_impl {
 	}
 };
 
-#ifdef BACKWARD_SYSTEM_LINUX
+#if defined(BACKWARD_SYSTEM_LINUX) || defined(BACKWARD_SYSTEM_DARWIN)
 
 template <>
 struct demangler_impl<system_tag::current_tag> {
@@ -421,7 +475,7 @@ private:
 	size_t                 _demangle_buffer_length;
 };
 
-#endif // BACKWARD_SYSTEM_LINUX
+#endif // BACKWARD_SYSTEM_LINUX || BACKWARD_SYSTEM_DARWIN
 
 struct demangler:
 	public demangler_impl<system_tag::current_tag> {};
@@ -691,6 +745,90 @@ public:
 
 #endif // BACKWARD_HAS_UNWIND
 #endif // BACKWARD_SYSTEM_LINUX
+
+#ifdef BACKWARD_SYSTEM_DARWIN
+
+class StackTraceDarwinImplBase {
+public:
+	StackTraceDarwinImplBase(): _thread_id(0), _skip(0) {}
+
+	unsigned thread_id() const {
+		return _thread_id;
+	}
+
+	void skip_n_firsts(size_t n) { _skip = n; }
+
+protected:
+	void load_thread_info() {
+		uint64_t tid;
+		pthread_threadid_np(NULL, &tid);
+
+		_thread_id = static_cast<unsigned>(tid);
+	}
+
+	size_t skip_n_firsts() const { return _skip; }
+
+private:
+	size_t _thread_id;
+	size_t _skip;
+};
+
+class StackTraceDarwinImplHolder: public StackTraceDarwinImplBase {
+public:
+	size_t size() const {
+		return _stacktrace.size() ? _stacktrace.size() - skip_n_firsts() : 0;
+	}
+	Trace operator[](size_t idx) {
+		if (idx >= size()) {
+			return Trace();
+		}
+		return Trace(_stacktrace[idx + skip_n_firsts()], idx);
+	}
+	void** begin() {
+		if (size()) {
+			return &_stacktrace[skip_n_firsts()];
+		}
+		return 0;
+	}
+
+protected:
+	std::vector<void*> _stacktrace;
+};
+
+template <>
+class StackTraceImpl<system_tag::darwin_tag>: public StackTraceDarwinImplHolder {
+public:
+	__attribute__ ((noinline)) // TODO use some macro
+	size_t load_here(size_t depth=32) {
+		load_thread_info();
+		if (depth == 0) {
+			return 0;
+		}
+		_stacktrace.resize(depth + 1);
+		size_t trace_cnt = backtrace(&_stacktrace[0], _stacktrace.size());
+		_stacktrace.resize(trace_cnt);
+		skip_n_firsts(1);
+		return size();
+	}
+
+	size_t load_from(void* addr, size_t depth=32) {
+		load_here(depth + 8);
+
+		for (size_t i = 0; i < _stacktrace.size(); ++i) {
+			if (_stacktrace[i] == addr) {
+				skip_n_firsts(i);
+				_stacktrace[i] = (void*)( (uintptr_t)_stacktrace[i] + 1);
+				break;
+			}
+		}
+
+		_stacktrace.resize(std::min(_stacktrace.size(),
+					    skip_n_firsts() + depth));
+		return size();
+	}
+};
+
+#endif // BACKWARD_SYSTEM_DARWIN
 
 class StackTrace:
 	public StackTraceImpl<system_tag::current_tag> {};
@@ -1490,6 +1628,93 @@ class TraceResolverImpl<system_tag::linux_tag>:
 
 #endif // BACKWARD_SYSTEM_LINUX
 
+#ifdef BACKWARD_SYSTEM_DARWIN
+
+class TraceResolverDarwinImplBase {
+protected:
+	std::string demangle(const char* funcname) {
+		return _demangler.demangle(funcname);
+	}
+
+private:
+	details::demangler _demangler;
+};
+
+template <typename STACKTRACE_TAG>
+class TraceResolverDarwinImpl;
+
+template <>
+class TraceResolverDarwinImpl<trace_resolver_tag::backtrace_symbol>:
+	public TraceResolverDarwinImplBase {
+public:
+	template <class ST>
+		void load_stacktrace(ST& st) {
+			using namespace details;
+			if (st.size() == 0) {
+				return;
+			}
+			_symbols.reset(
+					backtrace_symbols(st.begin(), st.size())
+					);
+		}
+
+	ResolvedTrace resolve(ResolvedTrace trace) {
+		// parse:
+		// <n>  <file>  <addr>  <mangled-name> + <offset>
+		char* filename = _symbols[trace.idx];
+
+		// skip "<n>  "
+		while(*filename && *filename != ' ') filename++;
+		while(*filename == ' ') filename++;
+
+		// find start of <mangled-name> from end (<file> may contain a space)
+		char* p = filename + strlen(filename) - 1;
+		// skip to start of " + <offset>"
+		while(p > filename && *p != ' ') p--;
+		while(p > filename && *p == ' ') p--;
+		while(p > filename && *p != ' ') p--;
+		while(p > filename && *p == ' ') p--;
+		char *funcname_end = p + 1;
+
+		// skip to start of "<manged-name>"
+		while(p > filename && *p != ' ') p--;
+		char *funcname = p + 1;
+
+		// skip to start of "  <addr>  "
+		while(p > filename && *p == ' ') p--;
+		while(p > filename && *p != ' ') p--;
+		while(p > filename && *p == ' ') p--;
+
+		// skip "<file>", handling the case where it contains a
+		char* filename_end = p + 1;
+		if (p == filename) {
+			// something went wrong, give up
+			filename_end = filename + strlen(filename);
+			funcname = filename_end;
+		}
+		trace.object_filename.assign(filename, filename_end); // ok even if filename_end is the ending \0 (then we assign entire string)
+
+		if (*funcname) { // if it's not end of string
+			*funcname_end = '\0';
+
+			trace.object_function = this->demangle(funcname);
+			trace.object_function += " ";
+			trace.object_function += (funcname_end + 1);
+			trace.source.function = trace.object_function; // we cannot do better.
+		}
+		return trace;
+	}
+
+private:
+	details::handle<char**> _symbols;
+};
+
+template<>
+class TraceResolverImpl<system_tag::darwin_tag>:
+	public TraceResolverDarwinImpl<trace_resolver_tag::current> {};
+
+#endif // BACKWARD_SYSTEM_DARWIN
+
 class TraceResolver:
 	public TraceResolverImpl<system_tag::current_tag> {};
 
@@ -1874,7 +2099,7 @@ private:
 		if (!trace.source.filename.size() || object) {
 			os << "   Object \""
 			   << trace.object_filename
-			   << ", at "
+			   << "\", at "
 			   << trace.addr
 			   << ", in "
 			   << trace.object_function
@@ -1958,7 +2183,7 @@ private:
 
 /*************** SIGNALS HANDLING ***************/
 
-#ifdef BACKWARD_SYSTEM_LINUX
+#if defined(BACKWARD_SYSTEM_LINUX) || defined(BACKWARD_SYSTEM_DARWIN)
 
 
 class SignalHandling {
@@ -1975,9 +2200,14 @@ public:
 		SIGSEGV,    // Invalid memory reference
 		SIGSYS,     // Bad argument to routine (SVr4)
 		SIGTRAP,    // Trace/breakpoint trap
+#if !defined(BACKWARD_SYSTEM_DARWIN)
 		SIGUNUSED,  // Synonymous with SIGSYS
+#endif
 		SIGXCPU,    // CPU time limit exceeded (4.2BSD)
 		SIGXFSZ,    // File size limit exceeded (4.2BSD)
+#if defined(BACKWARD_SYSTEM_DARWIN)
+		SIGEMT,     // emulation instruction executed
+#endif
 	};
         return std::vector<int>(posix_signals, posix_signals + sizeof posix_signals / sizeof posix_signals[0] );
    }
@@ -2040,6 +2270,8 @@ private:
 		error_addr = reinterpret_cast<void*>(uctx->uc_mcontext.pc);
 #elif defined(__ppc__) || defined(__powerpc) || defined(__powerpc__) || defined(__POWERPC__)
 		error_addr = reinterpret_cast<void*>(uctx->uc_mcontext.regs->nip);
+#elif defined(__APPLE__) && defined(__x86_64__)
+		error_addr = reinterpret_cast<void*>(uctx->uc_mcontext->__ss.__rip);
 #else
 #	warning ":/ sorry, ain't know no nothing none not of your architecture!"
 #endif
@@ -2066,7 +2298,7 @@ private:
 	}
 };
 
-#endif // BACKWARD_SYSTEM_LINUX
+#endif // BACKWARD_SYSTEM_LINUX || BACKWARD_SYSTEM_DARWIN
 
 #ifdef BACKWARD_SYSTEM_UNKNOWN
 
