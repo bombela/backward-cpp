@@ -432,7 +432,7 @@ struct demangler:
 
 struct Trace {
 	void*    addr;
-	unsigned idx;
+	size_t   idx;
 
 	Trace():
 		addr(0), idx(0) {}
@@ -498,7 +498,7 @@ public:
 	Trace operator[](size_t) { return Trace(); }
 	size_t load_here(size_t=0) { return 0; }
 	size_t load_from(void*, size_t=0) { return 0; }
-	unsigned thread_id() const { return 0; }
+	size_t thread_id() const { return 0; }
 	void skip_n_firsts(size_t) { }
 };
 
@@ -508,7 +508,7 @@ class StackTraceLinuxImplBase {
 public:
 	StackTraceLinuxImplBase(): _thread_id(0), _skip(0) {}
 
-	unsigned thread_id() const {
+	size_t thread_id() const {
 		return _thread_id;
 	}
 
@@ -516,7 +516,7 @@ public:
 
 protected:
 	void load_thread_info() {
-		_thread_id = syscall(SYS_gettid);
+		_thread_id = (size_t)syscall(SYS_gettid);
 		if (_thread_id == (size_t) getpid()) {
 			// If the thread is the main one, let's hide that.
 			// I like to keep little secret sometimes.
@@ -742,7 +742,7 @@ public:
 				return;
 			}
 			_symbols.reset(
-					backtrace_symbols(st.begin(), st.size())
+					backtrace_symbols(st.begin(), (int)st.size())
 					);
 		}
 
@@ -1345,8 +1345,8 @@ private:
 								&attr_mem), &line);
 					dwarf_formudata(dwarf_attr(die, DW_AT_call_column,
 								&attr_mem), &col);
-					sloc.line = line;
-					sloc.col = col;
+					sloc.line = (unsigned)line;
+					sloc.col = (unsigned)col;
 
 					trace.inliners.push_back(sloc);
 					break;
@@ -1856,7 +1856,7 @@ private:
 			}
 		}
 
-	void print_header(std::ostream& os, unsigned thread_id) {
+	void print_header(std::ostream& os, size_t thread_id) {
 		os << "Stack trace (most recent call last)";
 		if (thread_id) {
 			os << " in thread " << thread_id;
