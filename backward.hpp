@@ -500,6 +500,7 @@ public:
 	size_t load_from(void*, size_t=0) { return 0; }
 	unsigned thread_id() const { return 0; }
 	void skip_n_firsts(size_t) { }
+	bool can_safely_backtrace() { return true; }
 };
 
 #ifdef BACKWARD_SYSTEM_LINUX
@@ -513,6 +514,35 @@ public:
 	}
 
 	void skip_n_firsts(size_t n) { _skip = n; }
+
+#if (BACKWARD_HAS_BACKTRACE == 1) || (BACKWARD_HAS_BACKTRACE_SYMBOL == 1)
+	bool can_safely_backtrace() {
+		// we can't safely take a backtrace if we're inside malloc call
+		// hopefully `backtrace` won't use it
+		void *trace_addrs[50];
+		int addr_count = backtrace(&trace_addrs[0], sizeof(trace_addrs) / sizeof(trace_addrs[0]));
+		Dl_info info;
+		for (int i = 0; i < addr_count; i++) {
+			if (dladdr(trace_addrs[i], &info))
+			{
+				if (info.dli_saddr == malloc)
+				{
+					return false;
+				}
+				if (info.dli_sname && strcmp(info.dli_sname, "malloc") == 0)
+				{
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+#else
+// note that we might get deadlock in malloc!
+	bool can_safely_backtrace() {
+		return true;
+	}
+#endif
 
 protected:
 	void load_thread_info() {
@@ -2043,15 +2073,18 @@ private:
 #else
 #	warning ":/ sorry, ain't know no nothing none not of your architecture!"
 #endif
-		if (error_addr) {
-			st.load_from(error_addr, 32);
-		} else {
-			st.load_here(32);
-		}
 
-		Printer printer;
-		printer.address = true;
-		printer.print(st, stderr);
+		if (st.can_safely_backtrace()) {
+			if (error_addr) {
+				st.load_from(error_addr, 32);
+			} else {
+				st.load_here(32);
+			}
+
+			Printer printer;
+			printer.address = true;
+			printer.print(st, stderr);
+		}
 
 #if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
 		psiginfo(info, 0);
