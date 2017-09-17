@@ -1590,7 +1590,7 @@ public:
 		swap(from); return *this;
 	}
 #else
-	explicit SourceFile(const SourceFile& from) {
+	SourceFile(const SourceFile& from) {
 		// some sort of poor man's move semantic.
 		swap(const_cast<SourceFile&>(from));
 	}
