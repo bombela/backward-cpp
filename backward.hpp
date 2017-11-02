@@ -2017,14 +2017,7 @@ public:
 
 	bool loaded() const { return _loaded; }
 
-private:
-	details::handle<char*> _stack_content;
-	bool                   _loaded;
-
-#ifdef __GNUC__
-	__attribute__((noreturn))
-#endif
-	static void sig_handler(int, siginfo_t* info, void* _ctx) {
+	static void handleSignal(int, siginfo_t* info, void* _ctx) {
 		ucontext_t *uctx = (ucontext_t*) _ctx;
 
 		StackTrace st;
@@ -2055,6 +2048,17 @@ private:
 #if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
 		psiginfo(info, 0);
 #endif
+	}
+
+private:
+	details::handle<char*> _stack_content;
+	bool                   _loaded;
+
+#ifdef __GNUC__
+	__attribute__((noreturn))
+#endif
+	static void sig_handler(int signo, siginfo_t* info, void* _ctx) {
+		handleSignal(signo, info, _ctx);
 
 		// try to forward the signal.
 		raise(info->si_signo);
