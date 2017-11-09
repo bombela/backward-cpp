@@ -406,12 +406,11 @@ struct demangler_impl<system_tag::current_tag> {
 
 	std::string demangle(const char* funcname) {
 		using namespace details;
-		_demangle_buffer.reset(
-				abi::__cxa_demangle(funcname, _demangle_buffer.release(),
-					&_demangle_buffer_length, 0)
-				);
-		if (_demangle_buffer) {
-			return _demangle_buffer.get();
+		char* result = abi::__cxa_demangle(funcname,
+			_demangle_buffer.release(), &_demangle_buffer_length, 0);
+		if(result) {
+			_demangle_buffer.reset(result);
+			return result;
 		}
 		return funcname;
 	}
