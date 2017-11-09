@@ -330,7 +330,7 @@ public:
 	}
 
 	explicit handle(): _val(), _empty(true) {}
-	explicit handle(T val): _val(val), _empty(false) {}
+	explicit handle(T val): _val(val), _empty(false) { if(!_val) _empty = true; }
 
 #ifdef BACKWARD_ATLEAST_CXX11
 	handle(handle&& from): _empty(true) {
