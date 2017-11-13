@@ -330,7 +330,7 @@ public:
 	}
 
 	explicit handle(): _val(), _empty(true) {}
-	explicit handle(T val): _val(val), _empty(false) {}
+	explicit handle(T val): _val(val), _empty(false) { if(!_val) _empty = true; }
 
 #ifdef BACKWARD_ATLEAST_CXX11
 	handle(handle&& from): _empty(true) {
@@ -406,12 +406,11 @@ struct demangler_impl<system_tag::current_tag> {
 
 	std::string demangle(const char* funcname) {
 		using namespace details;
-		_demangle_buffer.reset(
-				abi::__cxa_demangle(funcname, _demangle_buffer.release(),
-					&_demangle_buffer_length, 0)
-				);
-		if (_demangle_buffer) {
-			return _demangle_buffer.get();
+		char* result = abi::__cxa_demangle(funcname,
+			_demangle_buffer.release(), &_demangle_buffer_length, 0);
+		if(result) {
+			_demangle_buffer.reset(result);
+			return result;
 		}
 		return funcname;
 	}
@@ -778,6 +777,26 @@ private:
 template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::libbfd>:
 	public TraceResolverLinuxImplBase {
+	static std::string read_symlink(std::string const & symlink_path) {
+		std::string path;
+		path.resize(100);
+
+		while(true) {
+			ssize_t len = ::readlink(symlink_path.c_str(), &*path.begin(), path.size());
+			if(len == -1) {
+				return "";
+			}
+			else if (len == path.size()) {
+				path.resize(path.size() * 2);
+			}
+			else {
+				path.resize(len);
+				break;
+			}
+		}
+
+		return path;
+	}
 public:
 	TraceResolverLinuxImpl(): _bfd_loaded(false) {}
 
@@ -792,6 +811,17 @@ public:
 		// The loaded object can be yourself btw.
 		if (!dladdr(trace.addr, &symbol_info)) {
 			return trace; // dat broken trace...
+		}
+
+		std::string argv0;
+		{
+			std::ifstream ifs("/proc/self/cmdline");
+			std::getline(ifs, argv0, '\0');
+		}
+		std::string tmp;
+		if(symbol_info.dli_fname == argv0) {
+			tmp = read_symlink("/proc/self/exe");
+			symbol_info.dli_fname = tmp.c_str();
 		}
 
 		// Now we get in symbol_info:
