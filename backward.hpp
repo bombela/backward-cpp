@@ -535,7 +535,7 @@ public:
 	size_t size() const {
 		return _stacktrace.size() ? _stacktrace.size() - skip_n_firsts() : 0;
 	}
-	Trace operator[](size_t idx) {
+	Trace operator[](size_t idx) const {
 		if (idx >= size()) {
 			return Trace();
 		}
@@ -786,7 +786,7 @@ class TraceResolverLinuxImpl<trace_resolver_tag::libbfd>:
 			if(len == -1) {
 				return "";
 			}
-			else if (len == path.size()) {
+			else if ((size_t)len == path.size()) {
 				path.resize(path.size() * 2);
 			}
 			else {
