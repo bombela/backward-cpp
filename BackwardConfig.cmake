@@ -133,7 +133,7 @@ find_package_handle_standard_args(Backward
 list(APPEND _BACKWARD_INCLUDE_DIRS ${BACKWARD_INCLUDE_DIR})
 
 macro(add_backward target)
-	target_include_directories(${target} PRIVATE ${_BACKWARD_INCLUDE_DIRS})
+	target_include_directories(${target} PRIVATE ${BACKWARD_INCLUDE_DIRS})
 	set_property(TARGET ${target} APPEND PROPERTY COMPILE_DEFINITIONS ${BACKWARD_DEFINITIONS})
 	set_property(TARGET ${target} APPEND PROPERTY LINK_LIBRARIES ${BACKWARD_LIBRARIES})
 endmacro()
