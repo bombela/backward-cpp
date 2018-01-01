@@ -1845,6 +1845,7 @@ public:
 	ColorMode::type color_mode;
 	bool address;
 	bool object;
+	bool ascending;
 	int inliner_context_size;
 	int trace_context_size;
 
@@ -1853,6 +1854,7 @@ public:
 		color_mode(ColorMode::automatic),
 		address(false),
 		object(false),
+		ascending(true),
 		inliner_context_size(5),
 		trace_context_size(7)
 		{}
@@ -1899,23 +1901,55 @@ private:
 
 	template <typename ST>
 		void print_stacktrace(ST& st, std::ostream& os, Colorize& colorize) {
-			print_header(os, st.thread_id());
+			if (ascending) {
+				print_header_asc(os, st.thread_id());
+			}
+			else {
+				print_header(os, st.thread_id());
+			}
+
 			_resolver.load_stacktrace(st);
-			for (size_t trace_idx = st.size(); trace_idx > 0; --trace_idx) {
-				print_trace(os, _resolver.resolve(st[trace_idx-1]), colorize);
+
+			if (ascending) {
+				for (size_t trace_idx = st.size() - 1; trace_idx >= 0; --trace_idx) {
+					print_trace(os, _resolver.resolve(st[trace_idx]), colorize);
+				}
+			}
+			else {
+				for (size_t trace_idx = 0; trace_idx < st.size(); trace_idx++) {
+					print_trace(os, _resolver.resolve(st[trace_idx]), colorize);
+				}
 			}
 		}
 
 	template <typename IT>
 		void print_stacktrace(IT begin, IT end, std::ostream& os, size_t thread_id, Colorize& colorize) {
-			print_header(os, thread_id);
-			for (; begin != end; ++begin) {
-				print_trace(os, *begin, colorize);
+			if (ascending) {
+				print_header_asc(os, thread_id);
+
+				for (; begin != end; ++begin) {
+					print_trace(os, *begin, colorize);
+				}
+			}
+			else {
+				print_header(os, thread_id);
+
+				for (; end != begin; --end) {
+					print_trace(os, *end, colorize);
+				}
 			}
 		}
 
-	void print_header(std::ostream& os, size_t thread_id) {
+	void print_header_asc(std::ostream& os, size_t thread_id) {
 		os << "Stack trace (most recent call last)";
+		if (thread_id) {
+			os << " in thread " << thread_id;
+		}
+		os << ":\n";
+	}
+
+	void print_header(std::ostream& os, size_t thread_id) {
+		os << "Stack trace";
 		if (thread_id) {
 			os << " in thread " << thread_id;
 		}
