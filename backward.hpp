@@ -67,6 +67,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <list>
 #include <new>
 #include <sstream>
 #include <streambuf>
@@ -891,7 +892,7 @@ public:
 
 		if (details_selected->found) {
 			if (details_selected->filename) {
-				trace.source.filename = details_selected->filename;
+				trace.source.filename = simplify_path(details_selected->filename);
 			}
 			trace.source.line = details_selected->line;
 
@@ -1173,6 +1174,33 @@ private:
 			return false;
 		}
 		return strcmp(a, b) == 0;
+	}
+
+	std::string simplify_path(const std::string& path) {
+		std::string result;
+
+		std::stringstream ss(path);
+		std::string part;
+		std::list<std::string> stack;
+
+		// Split path into parts and push into stack
+		while (std::getline(ss, part, '/')) {
+			if (part != "" && part != ".") {
+				if (part == ".." && !stack.empty())
+					stack.pop_back();
+				else if (part != "..")
+					stack.push_back(part);
+			}
+		}
+
+		// Re-generate path from the stack
+		for (auto const& str : stack)
+			result += "/" + str;
+
+		if (result.empty())
+			result = "/";
+
+		return result;
 	}
 
 };
