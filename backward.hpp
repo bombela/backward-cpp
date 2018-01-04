@@ -1909,6 +1909,8 @@ private:
 			}
 
 			_resolver.load_stacktrace(st);
+			if (st.size() <= 0)
+				return;
 
 			if (ascending) {
 				for (size_t trace_idx = st.size() - 1; trace_idx >= 0; --trace_idx) {
