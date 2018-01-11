@@ -28,23 +28,11 @@ class BackwardCpp(ConanFile):
     exports = 'backward.cpp', 'backward.hpp', 'test/*', 'CMakeLists.txt', 'BackwardConfig.cmake'
     generators = 'cmake'
 
-    def cmake_option(self, option, prefix = ''):
-        return '-D{}{}={}'.format(prefix, option.upper(), getattr(self.options, option))
-
     def build(self):
-        cmake = CMake(self.settings)
+        cmake = CMake(self)
 
-        options = ''
-        options += self.cmake_option('stack_walking_unwind')
-        options += self.cmake_option('stack_walking_backtrace')
-        options += self.cmake_option('stack_details_auto_detect')
-        options += self.cmake_option('stack_details_backtrace_symbol')
-        options += self.cmake_option('stack_details_dw')
-        options += self.cmake_option('stack_details_bfd')
-        options += self.cmake_option('shared', prefix = 'BACKWARD_')
-
-        self.run('cmake {} {} {} -DBACKWARD_TESTS=OFF'.format(self.conanfile_directory, cmake.command_line, options))
-        self.run('cmake --build . {}'.format(cmake.build_config))
+        cmake.configure(defs={'BACKWARD_' + name.upper(): value for name, value in self.options.values.as_list()})
+        cmake.build()
 
     def package(self):
         self.copy('backward.hpp', os.path.join('include', 'backward'))
