@@ -85,6 +85,13 @@ if (${STACK_DETAILS_AUTO_DETECT})
 	elseif(LIBBFD_FOUND)
 		LIST(APPEND _BACKWARD_INCLUDE_DIRS ${LIBBFD_INCLUDE_DIRS})
 		LIST(APPEND BACKWARD_LIBRARIES ${LIBBFD_LIBRARIES})
+
+		# If we attempt to link against static bfd, make sure to link its dependencies, too
+		get_filename_component(bfd_lib_ext "${LIBBFD_LIBRARY}" EXT)
+		if (bfd_lib_ext STREQUAL "${CMAKE_STATIC_LIBRARY_SUFFIX}")
+			list(APPEND BACKWARD_LIBRARIES iberty z)
+		endif()
+
 		set(STACK_DETAILS_DW FALSE)
 		set(STACK_DETAILS_BFD TRUE)
 		set(STACK_DETAILS_BACKTRACE_SYMBOL FALSE)
@@ -122,7 +129,7 @@ foreach(def ${BACKWARD_DEFINITIONS})
 	message(STATUS "${def}")
 endforeach()
 
-find_path(BACKWARD_INCLUDE_DIR backward.hpp PATHS ${CMAKE_CURRENT_LIST_DIR})
+set(BACKWARD_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(Backward
@@ -133,7 +140,7 @@ find_package_handle_standard_args(Backward
 list(APPEND _BACKWARD_INCLUDE_DIRS ${BACKWARD_INCLUDE_DIR})
 
 macro(add_backward target)
-	target_include_directories(${target} PRIVATE ${_BACKWARD_INCLUDE_DIRS})
+	target_include_directories(${target} PRIVATE ${BACKWARD_INCLUDE_DIRS})
 	set_property(TARGET ${target} APPEND PROPERTY COMPILE_DEFINITIONS ${BACKWARD_DEFINITIONS})
 	set_property(TARGET ${target} APPEND PROPERTY LINK_LIBRARIES ${BACKWARD_LIBRARIES})
 endmacro()

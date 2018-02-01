@@ -384,7 +384,7 @@ public:
 	}
 
 	explicit handle(): _val(), _empty(true) {}
-	explicit handle(T val): _val(val), _empty(false) {}
+	explicit handle(T val): _val(val), _empty(false) { if(!_val) _empty = true; }
 
 #ifdef BACKWARD_ATLEAST_CXX11
 	handle(handle&& from): _empty(true) {
@@ -460,12 +460,11 @@ struct demangler_impl<system_tag::current_tag> {
 
 	std::string demangle(const char* funcname) {
 		using namespace details;
-		_demangle_buffer.reset(
-				abi::__cxa_demangle(funcname, _demangle_buffer.release(),
-					&_demangle_buffer_length, 0)
-				);
-		if (_demangle_buffer) {
-			return _demangle_buffer.get();
+		char* result = abi::__cxa_demangle(funcname,
+			_demangle_buffer.release(), &_demangle_buffer_length, 0);
+		if(result) {
+			_demangle_buffer.reset(result);
+			return result;
 		}
 		return funcname;
 	}
@@ -486,7 +485,7 @@ struct demangler:
 
 struct Trace {
 	void*    addr;
-	unsigned idx;
+	size_t   idx;
 
 	Trace():
 		addr(0), idx(0) {}
@@ -552,7 +551,7 @@ public:
 	Trace operator[](size_t) { return Trace(); }
 	size_t load_here(size_t=0) { return 0; }
 	size_t load_from(void*, size_t=0) { return 0; }
-	unsigned thread_id() const { return 0; }
+	size_t thread_id() const { return 0; }
 	void skip_n_firsts(size_t) { }
 };
 
@@ -562,7 +561,7 @@ class StackTraceLinuxImplBase {
 public:
 	StackTraceLinuxImplBase(): _thread_id(0), _skip(0) {}
 
-	unsigned thread_id() const {
+	size_t thread_id() const {
 		return _thread_id;
 	}
 
@@ -570,7 +569,7 @@ public:
 
 protected:
 	void load_thread_info() {
-		_thread_id = syscall(SYS_gettid);
+		_thread_id = (size_t)syscall(SYS_gettid);
 		if (_thread_id == (size_t) getpid()) {
 			// If the thread is the main one, let's hide that.
 			// I like to keep little secret sometimes.
@@ -590,13 +589,13 @@ public:
 	size_t size() const {
 		return _stacktrace.size() ? _stacktrace.size() - skip_n_firsts() : 0;
 	}
-	Trace operator[](size_t idx) {
+	Trace operator[](size_t idx) const {
 		if (idx >= size()) {
 			return Trace();
 		}
 		return Trace(_stacktrace[idx + skip_n_firsts()], idx);
 	}
-	void** begin() {
+	void* const* begin() const {
 		if (size()) {
 			return &_stacktrace[skip_n_firsts()];
 		}
@@ -880,7 +879,7 @@ public:
 				return;
 			}
 			_symbols.reset(
-					backtrace_symbols(st.begin(), st.size())
+					backtrace_symbols(st.begin(), (int)st.size())
 					);
 		}
 
@@ -916,6 +915,26 @@ private:
 template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::libbfd>:
 	public TraceResolverLinuxImplBase {
+	static std::string read_symlink(std::string const & symlink_path) {
+		std::string path;
+		path.resize(100);
+
+		while(true) {
+			ssize_t len = ::readlink(symlink_path.c_str(), &*path.begin(), path.size());
+			if(len < 0) {
+				return "";
+			}
+			if ((size_t)len == path.size()) {
+				path.resize(path.size() * 2);
+			}
+			else {
+				path.resize(len);
+				break;
+			}
+		}
+
+		return path;
+	}
 public:
 	TraceResolverLinuxImpl(): _bfd_loaded(false) {}
 
@@ -930,6 +949,17 @@ public:
 		// The loaded object can be yourself btw.
 		if (!dladdr(trace.addr, &symbol_info)) {
 			return trace; // dat broken trace...
+		}
+
+		std::string argv0;
+		{
+			std::ifstream ifs("/proc/self/cmdline");
+			std::getline(ifs, argv0, '\0');
+		}
+		std::string tmp;
+		if(symbol_info.dli_fname == argv0) {
+			tmp = read_symlink("/proc/self/exe");
+			symbol_info.dli_fname = tmp.c_str();
 		}
 
 		// Now we get in symbol_info:
@@ -1483,8 +1513,8 @@ private:
 								&attr_mem), &line);
 					dwarf_formudata(dwarf_attr(die, DW_AT_call_column,
 								&attr_mem), &col);
-					sloc.line = line;
-					sloc.col = col;
+					sloc.line = (unsigned)line;
+					sloc.col = (unsigned)col;
 
 					trace.inliners.push_back(sloc);
 					break;
@@ -2081,7 +2111,7 @@ private:
 			}
 		}
 
-	void print_header(std::ostream& os, unsigned thread_id) {
+	void print_header(std::ostream& os, size_t thread_id) {
 		os << "Stack trace (most recent call last)";
 		if (thread_id) {
 			os << " in thread " << thread_id;
@@ -2200,9 +2230,6 @@ public:
 		SIGSEGV,    // Invalid memory reference
 		SIGSYS,     // Bad argument to routine (SVr4)
 		SIGTRAP,    // Trace/breakpoint trap
-#if !defined(BACKWARD_SYSTEM_DARWIN)
-		SIGUNUSED,  // Synonymous with SIGSYS
-#endif
 		SIGXCPU,    // CPU time limit exceeded (4.2BSD)
 		SIGXFSZ,    // File size limit exceeded (4.2BSD)
 #if defined(BACKWARD_SYSTEM_DARWIN)
@@ -2248,14 +2275,7 @@ public:
 
 	bool loaded() const { return _loaded; }
 
-private:
-	details::handle<char*> _stack_content;
-	bool                   _loaded;
-
-#ifdef __GNUC__
-	__attribute__((noreturn))
-#endif
-	static void sig_handler(int, siginfo_t* info, void* _ctx) {
+	static void handleSignal(int, siginfo_t* info, void* _ctx) {
 		ucontext_t *uctx = (ucontext_t*) _ctx;
 
 		StackTrace st;
@@ -2270,6 +2290,8 @@ private:
 		error_addr = reinterpret_cast<void*>(uctx->uc_mcontext.pc);
 #elif defined(__ppc__) || defined(__powerpc) || defined(__powerpc__) || defined(__POWERPC__)
 		error_addr = reinterpret_cast<void*>(uctx->uc_mcontext.regs->nip);
+#elif defined(__s390x__)
+                error_addr = reinterpret_cast<void*>(uctx->uc_mcontext.psw.addr);
 #elif defined(__APPLE__) && defined(__x86_64__)
 		error_addr = reinterpret_cast<void*>(uctx->uc_mcontext->__ss.__rip);
 #else
@@ -2288,6 +2310,17 @@ private:
 #if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
 		psiginfo(info, 0);
 #endif
+	}
+
+private:
+	details::handle<char*> _stack_content;
+	bool                   _loaded;
+
+#ifdef __GNUC__
+	__attribute__((noreturn))
+#endif
+	static void sig_handler(int signo, siginfo_t* info, void* _ctx) {
+		handleSignal(signo, info, _ctx);
 
 		// try to forward the signal.
 		raise(info->si_signo);

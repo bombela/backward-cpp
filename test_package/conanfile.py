@@ -3,13 +3,12 @@ import os
 
 class TestBackward(ConanFile):
     settings = 'os', 'compiler', 'build_type', 'arch'
-    requires = 'cmake-utils/0.0.0@Manu343726/testing', 'backward/1.3.0@Manu343726/testing'
     generators = 'cmake'
 
     def build(self):
-        cmake = CMake(self.settings)
-        self.run('cmake {} {}'.format(self.conanfile_directory, cmake.command_line))
-        self.run('cmake --build . {}'.format(cmake.build_config))
+        cmake = CMake(self)
+        cmake.configure(defs={'CMAKE_VERBOSE_MAKEFILE': 'ON'})
+        cmake.build()
 
     def test(self):
         self.run(os.path.join('.', 'bin', 'example'))

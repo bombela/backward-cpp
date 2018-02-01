@@ -127,7 +127,10 @@ easiest for you to install, so pick your poison:
 
 	apt-get install binutils-dev (or equivalent)
 
-And do not forget to link with the lib: `g++/clang++ -lbfd ...`
+And do not forget to link with the lib: `g++/clang++ -lbfd -ldl ...`
+
+This library requires dynamic loading. Which is provided by the library `dl`.
+Hence why we also link with `-ldl`.
 
 Then define the following before every inclusion of `backward.hpp` (don't
 forget to update `backward.cpp` as well):
