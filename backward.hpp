@@ -555,11 +555,9 @@ public:
 	void skip_n_firsts(size_t) { }
 };
 
-#ifdef BACKWARD_SYSTEM_LINUX
-
-class StackTraceLinuxImplBase {
+class StackTraceImplBase {
 public:
-	StackTraceLinuxImplBase(): _thread_id(0), _skip(0) {}
+	StackTraceImplBase(): _thread_id(0), _skip(0) {}
 
 	size_t thread_id() const {
 		return _thread_id;
@@ -569,12 +567,19 @@ public:
 
 protected:
 	void load_thread_info() {
+#ifdef BACKWARD_SYSTEM_LINUX
 		_thread_id = (size_t)syscall(SYS_gettid);
 		if (_thread_id == (size_t) getpid()) {
 			// If the thread is the main one, let's hide that.
 			// I like to keep little secret sometimes.
 			_thread_id = 0;
 		}
+#elif defined(BACKWARD_SYSTEM_DARWIN)
+		uint64_t tid;
+		pthread_threadid_np(NULL, &tid);
+
+		_thread_id = static_cast<unsigned>(tid);
+#endif
 	}
 
 	size_t skip_n_firsts() const { return _skip; }
@@ -584,7 +589,7 @@ private:
 	size_t _skip;
 };
 
-class StackTraceLinuxImplHolder: public StackTraceLinuxImplBase {
+class StackTraceImplHolder: public StackTraceImplBase {
 public:
 	size_t size() const {
 		return _stacktrace.size() ? _stacktrace.size() - skip_n_firsts() : 0;
@@ -606,8 +611,7 @@ protected:
 	std::vector<void*> _stacktrace;
 };
 
-
-#if BACKWARD_HAS_UNWIND == 1
+#if defined(BACKWARD_SYSTEM_LINUX) && BACKWARD_HAS_UNWIND == 1
 
 namespace details {
 
@@ -666,7 +670,7 @@ size_t unwind(F f, size_t depth) {
 
 
 template <>
-class StackTraceImpl<system_tag::linux_tag>: public StackTraceLinuxImplHolder {
+class StackTraceImpl<system_tag::linux_tag>: public StackTraceImplHolder {
 public:
 	__attribute__ ((noinline)) // TODO use some macro
 	size_t load_here(size_t depth=32) {
@@ -706,11 +710,12 @@ private:
 	};
 };
 
+#endif // BACKWARD_SYSTEM_LINUX && BACKWARD_HAS_UNWIND == 1
 
-#else // BACKWARD_HAS_UNWIND == 0
+#if (defined(BACKWARD_SYSTEM_LINUX) && BACKWARD_HAS_UNWIND == 0) || defined(BACKWARD_SYSTEM_DARWIN)
 
 template <>
-class StackTraceImpl<system_tag::linux_tag>: public StackTraceLinuxImplHolder {
+class StackTraceImpl<system_tag::current_tag>: public StackTraceImplHolder {
 public:
 	__attribute__ ((noinline)) // TODO use some macro
 	size_t load_here(size_t depth=32) {
@@ -742,92 +747,7 @@ public:
 	}
 };
 
-#endif // BACKWARD_HAS_UNWIND
-#endif // BACKWARD_SYSTEM_LINUX
-
-#ifdef BACKWARD_SYSTEM_DARWIN
-
-class StackTraceDarwinImplBase {
-public:
-	StackTraceDarwinImplBase(): _thread_id(0), _skip(0) {}
-
-	unsigned thread_id() const {
-		return _thread_id;
-	}
-
-	void skip_n_firsts(size_t n) { _skip = n; }
-
-protected:
-	void load_thread_info() {
-		uint64_t tid;
-		pthread_threadid_np(NULL, &tid);
-
-		_thread_id = static_cast<unsigned>(tid);
-	}
-
-	size_t skip_n_firsts() const { return _skip; }
-
-private:
-	size_t _thread_id;
-	size_t _skip;
-};
-
-class StackTraceDarwinImplHolder: public StackTraceDarwinImplBase {
-public:
-	size_t size() const {
-		return _stacktrace.size() ? _stacktrace.size() - skip_n_firsts() : 0;
-	}
-	Trace operator[](size_t idx) {
-		if (idx >= size()) {
-			return Trace();
-		}
-		return Trace(_stacktrace[idx + skip_n_firsts()], idx);
-	}
-	void** begin() {
-		if (size()) {
-			return &_stacktrace[skip_n_firsts()];
-		}
-		return 0;
-	}
-
-protected:
-	std::vector<void*> _stacktrace;
-};
-
-template <>
-class StackTraceImpl<system_tag::darwin_tag>: public StackTraceDarwinImplHolder {
-public:
-	__attribute__ ((noinline)) // TODO use some macro
-	size_t load_here(size_t depth=32) {
-		load_thread_info();
-		if (depth == 0) {
-			return 0;
-		}
-		_stacktrace.resize(depth + 1);
-		size_t trace_cnt = backtrace(&_stacktrace[0], _stacktrace.size());
-		_stacktrace.resize(trace_cnt);
-		skip_n_firsts(1);
-		return size();
-	}
-
-	size_t load_from(void* addr, size_t depth=32) {
-		load_here(depth + 8);
-
-		for (size_t i = 0; i < _stacktrace.size(); ++i) {
-			if (_stacktrace[i] == addr) {
-				skip_n_firsts(i);
-				_stacktrace[i] = (void*)( (uintptr_t)_stacktrace[i] + 1);
-				break;
-			}
-		}
-
-		_stacktrace.resize(std::min(_stacktrace.size(),
-					    skip_n_firsts() + depth));
-		return size();
-	}
-};
-
-#endif // BACKWARD_SYSTEM_DARWIN
+#endif // (BACKWARD_SYSTEM_LINUX && BACKWARD_HAS_UNWIND == 0) || BACKWARD_SYSTEM_DARWIN
 
 class StackTrace:
 	public StackTraceImpl<system_tag::current_tag> {};
@@ -851,9 +771,7 @@ public:
 
 #endif
 
-#ifdef BACKWARD_SYSTEM_LINUX
-
-class TraceResolverLinuxImplBase {
+class TraceResolverImplBase {
 protected:
 	std::string demangle(const char* funcname) {
 		return _demangler.demangle(funcname);
@@ -863,6 +781,8 @@ private:
 	details::demangler _demangler;
 };
 
+#ifdef BACKWARD_SYSTEM_LINUX
+
 template <typename STACKTRACE_TAG>
 class TraceResolverLinuxImpl;
 
@@ -870,7 +790,7 @@ class TraceResolverLinuxImpl;
 
 template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::backtrace_symbol>:
-	public TraceResolverLinuxImplBase {
+	public TraceResolverImplBase {
 public:
 	template <class ST>
 		void load_stacktrace(ST& st) {
@@ -914,7 +834,7 @@ private:
 
 template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::libbfd>:
-	public TraceResolverLinuxImplBase {
+	public TraceResolverImplBase {
 	static std::string read_symlink(std::string const & symlink_path) {
 		std::string path;
 		path.resize(100);
@@ -1320,7 +1240,7 @@ private:
 
 template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::libdw>:
-	public TraceResolverLinuxImplBase {
+	public TraceResolverImplBase {
 public:
 	TraceResolverLinuxImpl(): _dwfl_handle_initialized(false) {}
 
@@ -1660,22 +1580,12 @@ class TraceResolverImpl<system_tag::linux_tag>:
 
 #ifdef BACKWARD_SYSTEM_DARWIN
 
-class TraceResolverDarwinImplBase {
-protected:
-	std::string demangle(const char* funcname) {
-		return _demangler.demangle(funcname);
-	}
-
-private:
-	details::demangler _demangler;
-};
-
 template <typename STACKTRACE_TAG>
 class TraceResolverDarwinImpl;
 
 template <>
 class TraceResolverDarwinImpl<trace_resolver_tag::backtrace_symbol>:
-	public TraceResolverDarwinImplBase {
+	public TraceResolverImplBase {
 public:
 	template <class ST>
 		void load_stacktrace(ST& st) {
