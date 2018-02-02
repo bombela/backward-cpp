@@ -242,6 +242,11 @@
 // The default is:
 // #define BACKWARD_HAS_BACKTRACE_SYMBOL == 1
 //
+#	if BACKWARD_HAS_BACKTRACE_SYMBOL == 1
+#	else
+#		undef  BACKWARD_HAS_BACKTRACE_SYMBOL
+#		define BACKWARD_HAS_BACKTRACE_SYMBOL 1
+#	endif
 
 #	include <cxxabi.h>
 #	include <fcntl.h>
