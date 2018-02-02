@@ -161,31 +161,6 @@
 #		define BACKWARD_HAS_BACKTRACE_SYMBOL 1
 #	endif
 
-
-#	if BACKWARD_HAS_UNWIND == 1
-
-#		include <unwind.h>
-// while gcc's unwind.h defines something like that:
-//  extern _Unwind_Ptr _Unwind_GetIP (struct _Unwind_Context *);
-//  extern _Unwind_Ptr _Unwind_GetIPInfo (struct _Unwind_Context *, int *);
-//
-// clang's unwind.h defines something like this:
-//  uintptr_t _Unwind_GetIP(struct _Unwind_Context* __context);
-//
-// Even if the _Unwind_GetIPInfo can be linked to, it is not declared, worse we
-// cannot just redeclare it because clang's unwind.h doesn't define _Unwind_Ptr
-// anyway.
-//
-// Luckily we can play on the fact that the guard macros have a different name:
-#ifdef __CLANG_UNWIND_H
-// In fact, this function still comes from libgcc (on my different linux boxes,
-// clang links against libgcc).
-#		include <inttypes.h>
-extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
-#endif
-
-#	endif
-
 #	include <cxxabi.h>
 #	include <fcntl.h>
 #	include <link.h>
@@ -231,13 +206,30 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 // On Darwin, backtrace can back-trace or "walk" the stack using the following
 // libraries:
 //
+// #define BACKWARD_HAS_UNWIND 1
+//  - unwind comes from libgcc, but I saw an equivalent inside clang itself.
+//  - with unwind, the stacktrace is as accurate as it can possibly be, since
+//  this is used by the C++ runtine in gcc/clang for stack unwinding on
+//  exception.
+//  - normally libgcc is already linked to your program by default.
+//
 // #define BACKWARD_HAS_BACKTRACE == 1
 //  - backtrace is available by default, though it does not produce as much information
 //  as another library might.
 //
 // The default is:
-// #define BACKWARD_HAS_BACKTRACE == 1
-#	define BACKWARD_HAS_BACKTRACE 1
+// #define BACKWARD_HAS_UNWIND == 1
+//
+// Note that only one of the define should be set to 1 at a time.
+//
+#	if   BACKWARD_HAS_UNWIND == 1
+#	elif BACKWARD_HAS_BACKTRACE == 1
+#	else
+#		undef  BACKWARD_HAS_UNWIND
+#		define BACKWARD_HAS_UNWIND 1
+#		undef  BACKWARD_HAS_BACKTRACE
+#		define BACKWARD_HAS_BACKTRACE 0
+#	endif
 
 // On Darwin, backward can extract detailed information about a stack trace
 // using one of the following libraries:
@@ -250,7 +242,6 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 // The default is:
 // #define BACKWARD_HAS_BACKTRACE_SYMBOL == 1
 //
-#	define BACKWARD_HAS_BACKTRACE_SYMBOL 1
 
 #	include <cxxabi.h>
 #	include <fcntl.h>
@@ -263,6 +254,30 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 #		include <execinfo.h>
 #	endif
 #endif // defined(BACKWARD_SYSTEM_DARWIN)
+
+#if BACKWARD_HAS_UNWIND == 1
+
+#	include <unwind.h>
+// while gcc's unwind.h defines something like that:
+//  extern _Unwind_Ptr _Unwind_GetIP (struct _Unwind_Context *);
+//  extern _Unwind_Ptr _Unwind_GetIPInfo (struct _Unwind_Context *, int *);
+//
+// clang's unwind.h defines something like this:
+//  uintptr_t _Unwind_GetIP(struct _Unwind_Context* __context);
+//
+// Even if the _Unwind_GetIPInfo can be linked to, it is not declared, worse we
+// cannot just redeclare it because clang's unwind.h doesn't define _Unwind_Ptr
+// anyway.
+//
+// Luckily we can play on the fact that the guard macros have a different name:
+#ifdef __CLANG_UNWIND_H
+// In fact, this function still comes from libgcc (on my different linux boxes,
+// clang links against libgcc).
+#	include <inttypes.h>
+extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
+#endif
+
+#endif // BACKWARD_HAS_UNWIND == 1
 
 #ifdef BACKWARD_ATLEAST_CXX11
 #	include <unordered_map>
@@ -611,7 +626,8 @@ protected:
 	std::vector<void*> _stacktrace;
 };
 
-#if defined(BACKWARD_SYSTEM_LINUX) && BACKWARD_HAS_UNWIND == 1
+
+#if BACKWARD_HAS_UNWIND == 1
 
 namespace details {
 
@@ -670,7 +686,7 @@ size_t unwind(F f, size_t depth) {
 
 
 template <>
-class StackTraceImpl<system_tag::linux_tag>: public StackTraceImplHolder {
+class StackTraceImpl<system_tag::current_tag>: public StackTraceImplHolder {
 public:
 	__attribute__ ((noinline)) // TODO use some macro
 	size_t load_here(size_t depth=32) {
@@ -710,9 +726,8 @@ private:
 	};
 };
 
-#endif // BACKWARD_SYSTEM_LINUX && BACKWARD_HAS_UNWIND == 1
 
-#if (defined(BACKWARD_SYSTEM_LINUX) && BACKWARD_HAS_UNWIND == 0) || defined(BACKWARD_SYSTEM_DARWIN)
+#else // BACKWARD_HAS_UNWIND == 0
 
 template <>
 class StackTraceImpl<system_tag::current_tag>: public StackTraceImplHolder {
@@ -747,7 +762,7 @@ public:
 	}
 };
 
-#endif // (BACKWARD_SYSTEM_LINUX && BACKWARD_HAS_UNWIND == 0) || BACKWARD_SYSTEM_DARWIN
+#endif // BACKWARD_HAS_UNWIND
 
 class StackTrace:
 	public StackTraceImpl<system_tag::current_tag> {};
