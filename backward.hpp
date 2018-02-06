@@ -339,11 +339,11 @@ namespace trace_resolver_tag {
 	struct backtrace_symbol;
 
 #	if   BACKWARD_HAS_DW == 1
-	typedef libdw current;
+		typedef libdw current;
 #	elif BACKWARD_HAS_BFD == 1
-	typedef libbfd current;
+		typedef libbfd current;
 #	elif BACKWARD_HAS_BACKTRACE_SYMBOL == 1
-	typedef backtrace_symbol current;
+		typedef backtrace_symbol current;
 #	else
 #		error "You shall not pass, until you know what you want."
 #	endif
@@ -351,7 +351,7 @@ namespace trace_resolver_tag {
 	struct backtrace_symbol;
 
 #	if BACKWARD_HAS_BACKTRACE_SYMBOL == 1
-	typedef backtrace_symbol current;
+		typedef backtrace_symbol current;
 #	else
 #		error "You shall not pass, until you know what you want."
 #	endif
