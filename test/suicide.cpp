@@ -82,6 +82,8 @@ TEST_DIVZERO (divide_by_zero)
 }
 #endif
 
+// Darwin does not allow RLIMIT_STACK to be reduced
+#ifndef __APPLE__
 int bye_bye_stack(int i) {
 	return bye_bye_stack(i + 1) + bye_bye_stack(i * 2);
 }
@@ -94,3 +96,4 @@ TEST_SEGFAULT(stackoverflow)
 	int r = bye_bye_stack(42);
 	std::cout << "r=" << r << std::endl;
 }
+#endif
