@@ -595,10 +595,11 @@ protected:
 			_thread_id = 0;
 		}
 #elif defined(BACKWARD_SYSTEM_DARWIN)
-		uint64_t tid;
-		pthread_threadid_np(NULL, &tid);
-
-		_thread_id = static_cast<unsigned>(tid);
+		_thread_id = reinterpret_cast<size_t>(pthread_self());
+		if (pthread_main_np() == 1) {
+			// If the thread is the main one, let's hide that.
+			_thread_id = 0;
+		}
 #endif
 	}
 
