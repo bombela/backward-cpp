@@ -297,6 +297,7 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 	} // namespace details
 	} // namespace backward
 #else // NOT BACKWARD_ATLEAST_CXX11
+#	define override
 #	include <map>
 	namespace backward {
 	namespace details {
@@ -1871,15 +1872,15 @@ namespace ColorMode {
 class cfile_streambuf: public std::streambuf {
 public:
 	cfile_streambuf(FILE *_sink): sink(_sink) {}
-	int_type underflow() { return traits_type::eof(); }
-	int_type overflow(int_type ch) {
+	int_type underflow() override { return traits_type::eof(); }
+	int_type overflow(int_type ch) override {
 		if (traits_type::not_eof(ch) && fwrite(&ch, sizeof ch, 1, sink) == 1) {
 				return ch;
 		}
 		return traits_type::eof();
 	}
 
-	std::streamsize xsputn(const char_type* s, std::streamsize count) {
+	std::streamsize xsputn(const char_type* s, std::streamsize count) override {
 		return fwrite(s, sizeof *s, count, sink);
 	}
 
