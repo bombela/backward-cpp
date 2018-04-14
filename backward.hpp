@@ -691,7 +691,7 @@ public:
 		_index = -1;
 		_depth = depth;
 		_Unwind_Backtrace(&this->backtrace_trampoline, this);
-		return _index;
+		return static_cast<size_t>(_index);
 	}
 
 private:
@@ -721,7 +721,7 @@ private:
 		}
 
 		if (_index >= 0) { // ignore first frame.
-			(*_f)(_index, reinterpret_cast<void*>(ip));
+			(*_f)(static_cast<size_t>(_index), reinterpret_cast<void*>(ip));
 		}
 		_index += 1;
 		return _URC_NO_REASON;
@@ -915,7 +915,7 @@ class TraceResolverLinuxImpl<trace_resolver_tag::libbfd>:
 				path.resize(path.size() * 2);
 			}
 			else {
-				path.resize(len);
+				path.resize(static_cast<std::string::size_type>(len));
 				break;
 			}
 		}
@@ -1163,7 +1163,7 @@ private:
 
 		if (symtab_storage_size > 0) {
 			symtab.reset(
-					static_cast<bfd_symbol**>(malloc(symtab_storage_size))
+					static_cast<bfd_symbol**>(malloc(static_cast<size_t>(symtab_storage_size)))
 					);
 			symcount = bfd_canonicalize_symtab(
 					bfd_handle.get(), symtab.get()
@@ -1172,7 +1172,7 @@ private:
 
 		if (dyn_symtab_storage_size > 0) {
 			dynamic_symtab.reset(
-					static_cast<bfd_symbol**>(malloc(dyn_symtab_storage_size))
+					static_cast<bfd_symbol**>(malloc(static_cast<size_t>(dyn_symtab_storage_size)))
 					);
 			dyn_symcount = bfd_canonicalize_dynamic_symtab(
 					bfd_handle.get(), dynamic_symtab.get()
@@ -3370,7 +3370,7 @@ public:
 	}
 
 	std::streamsize xsputn(const char_type* s, std::streamsize count) override {
-		return fwrite(s, sizeof *s, count, sink);
+		return static_cast<std::streamsize>(fwrite(s, sizeof *s, static_cast<size_t>(count), sink));
 	}
 
 #ifdef BACKWARD_ATLEAST_CXX11
@@ -3594,7 +3594,7 @@ private:
 		typedef SnippetFactory::lines_t lines_t;
 
 		lines_t lines = _snippets.get_snippet(source_loc.filename,
-				source_loc.line, context_size);
+				source_loc.line, static_cast<unsigned>(context_size));
 
 		for (lines_t::const_iterator it = lines.begin();
 				it != lines.end(); ++it) {
@@ -3681,7 +3681,7 @@ public:
 		for (size_t i = 0; i < posix_signals.size(); ++i) {
 			struct sigaction action;
 			memset(&action, 0, sizeof action);
-			action.sa_flags = (SA_SIGINFO | SA_ONSTACK | SA_NODEFER |
+			action.sa_flags = static_cast<int>(SA_SIGINFO | SA_ONSTACK | SA_NODEFER |
 					SA_RESETHAND);
 			sigfillset(&action.sa_mask);
 			sigdelset(&action.sa_mask, posix_signals[i]);
