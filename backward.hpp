@@ -335,6 +335,7 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 	} // namespace details
 	} // namespace backward
 #else // NOT BACKWARD_ATLEAST_CXX11
+#	define nullptr NULL
 #	define override
 #	include <map>
 	namespace backward {
@@ -472,7 +473,7 @@ public:
 	}
 	operator const dummy*() const {
 		if (_empty) {
-			return 0;
+			return nullptr;
 		}
 		return reinterpret_cast<const dummy*>(_val);
 	}
@@ -523,7 +524,7 @@ struct demangler_impl<system_tag::current_tag> {
 	std::string demangle(const char* funcname) {
 		using namespace details;
 		char* result = abi::__cxa_demangle(funcname,
-			_demangle_buffer.release(), &_demangle_buffer_length, 0);
+			_demangle_buffer.release(), &_demangle_buffer_length, nullptr);
 		if(result) {
 			_demangle_buffer.reset(result);
 			return result;
@@ -550,7 +551,7 @@ struct Trace {
 	size_t   idx;
 
 	Trace():
-		addr(0), idx(0) {}
+		addr(nullptr), idx(0) {}
 
 	explicit Trace(void* _addr, size_t _idx):
 		addr(_addr), idx(_idx) {}
@@ -671,7 +672,7 @@ public:
 		if (size()) {
 			return &_stacktrace[skip_n_firsts()];
 		}
-		return 0;
+		return nullptr;
 	}
 
 protected:
@@ -3259,7 +3260,7 @@ public:
 	}
 
 #ifdef BACKWARD_ATLEAST_CXX11
-	SourceFile(SourceFile&& from): _file(0) {
+	SourceFile(SourceFile&& from): _file(nullptr) {
 		swap(from);
 	}
 	SourceFile& operator=(SourceFile&& from) {
@@ -3616,7 +3617,7 @@ private:
 
 	void print_source_loc(std::ostream& os, const char* indent,
 			const ResolvedTrace::SourceLoc& source_loc,
-			void* addr=0) {
+			void* addr=nullptr) {
 		os << indent
 		   << "Source \""
 		   << source_loc.filename
@@ -3625,7 +3626,7 @@ private:
 		   << ", in "
 		   << source_loc.function;
 
-		if (address && addr != 0) {
+		if (address && addr != nullptr) {
 			os << " [" << addr << "]";
 		}
 		os << "\n";
@@ -3671,7 +3672,7 @@ public:
 			ss.ss_sp = _stack_content.get();
 			ss.ss_size = stack_size;
 			ss.ss_flags = 0;
-			if (sigaltstack(&ss, 0) < 0) {
+			if (sigaltstack(&ss, nullptr) < 0) {
 				success = false;
 			}
 		} else {
@@ -3687,7 +3688,7 @@ public:
 			sigdelset(&action.sa_mask, posix_signals[i]);
 			action.sa_sigaction = &sig_handler;
 
-			int r = sigaction(posix_signals[i], &action, 0);
+			int r = sigaction(posix_signals[i], &action, nullptr);
 			if (r < 0) success = false;
 		}
 
@@ -3700,7 +3701,7 @@ public:
 		ucontext_t *uctx = static_cast<ucontext_t*>(_ctx);
 
 		StackTrace st;
-		void* error_addr = 0;
+		void* error_addr = nullptr;
 #ifdef REG_RIP // x86_64
 		error_addr = reinterpret_cast<void*>(uctx->uc_mcontext.gregs[REG_RIP]);
 #elif defined(REG_EIP) // x86_32
@@ -3731,7 +3732,7 @@ public:
 		printer.print(st, stderr);
 
 #if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
-		psiginfo(info, 0);
+		psiginfo(info, nullptr);
 #else
 		(void)info;
 #endif
