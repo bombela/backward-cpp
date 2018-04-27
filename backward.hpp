@@ -1861,6 +1861,15 @@ private:
 
 /*************** PRINTER ***************/
 
+template<typename Stream>
+class Colorize;
+
+template<typename Stream>
+class BlankPadding;
+
+template<typename Stream>
+class NewLine;
+
 namespace ColorMode {
 	enum type {
 		automatic,
@@ -1909,17 +1918,14 @@ namespace Color {
 	};
 } // namespace Color
 
-class Colorize {
+template<>
+class Colorize<std::ostream> {
 public:
 	Colorize(std::ostream& os):
 		_os(os), _reset(false), _enabled(false) {}
 
 	void activate(ColorMode::type mode) {
 		_enabled = mode == ColorMode::always;
-	}
-
-	void activate(ColorMode::type mode, FILE* fp) {
-		activate(mode, fileno(fp));
 	}
 
 	void set_color(Color::type ccode) {
@@ -1938,13 +1944,40 @@ public:
 	}
 
 private:
-	void activate(ColorMode::type mode, int fd) {
-		activate(mode == ColorMode::automatic && isatty(fd) ? ColorMode::always : mode);
-	}
-
 	std::ostream& _os;
 	bool          _reset;
 	bool          _enabled;
+};
+
+template<>
+class Colorize<FILE *> {
+public:
+	Colorize(FILE *fp):
+		_fp(fp), _reset(false), _enabled(false) {}
+
+	void activate(ColorMode::type mode) {
+		_enabled = (mode == ColorMode::automatic && isatty(fileno(_fp))) ? ColorMode::always : mode;
+	}
+
+	void set_color(Color::type ccode) {
+		if (!_enabled) return;
+
+		// I assume that the terminal can handle basic colors. Seriously I
+		// don't want to deal with all the termcap shit.
+		fprintf(_fp, "\033[%dm", static_cast<int>(ccode));
+		_reset = (ccode != Color::reset);
+	}
+
+	~Colorize() {
+		if (_reset) {
+			set_color(Color::reset);
+		}
+	}
+
+private:
+	FILE* _fp;
+	bool  _reset;
+	bool  _enabled;
 };
 
 #else // ndef BACKWARD_SYSTEM_LINUX
@@ -1957,19 +1990,95 @@ namespace Color {
 	};
 } // namespace Color
 
-class Colorize {
+template<>
+class Colorize<std::ostream> {
 public:
 	Colorize(std::ostream&) {}
 	void activate(ColorMode::type) {}
-	void activate(ColorMode::type, FILE*) {}
+	void set_color(Color::type) {}
+};
+
+template<>
+class Colorize<FILE *> {
+public:
+	Colorize(FILE *) {}
+	void activate(ColorMode::type) {}
 	void set_color(Color::type) {}
 };
 
 #endif // BACKWARD_SYSTEM_LINUX
 
+template<>
+class BlankPadding<std::ostream> {
+public:
+	BlankPadding(int width) : _width(width) {}
+
+	int width() const { return _width; }
+
+private:
+	int _width;
+};
+
+inline std::ostream& operator<<(std::ostream& os, const BlankPadding<std::ostream>& bp) {
+	os << std::setw(bp.width());
+	return os;
+}
+
+template<>
+class NewLine<std::ostream> {
+};
+
+inline std::ostream& operator<<(std::ostream& os, const NewLine<std::ostream>&) {
+	os << std::endl;
+	return os;
+}
+
+class FileStreamWrapper {
+public:
+	FileStreamWrapper(FILE *fp) : _fp(fp) {}
+
+	FileStreamWrapper& operator<<(int v) {
+		fprintf(_fp, "%d", v);
+		return *this;
+	}
+
+	FileStreamWrapper& operator<<(const std::string& s) {
+		fprintf(_fp, "%s", s.c_str());
+		return *this;
+	}
+
+private:
+	FILE *_fp;
+};
+
+template<>
+class BlankPadding<FILE *> {
+public:
+	BlankPadding(int width) : _width(width) {}
+
+	int width() const { return _width; }
+
+private:
+	int _width;
+};
+
+inline FileStreamWrapper& operator<<(FileStreamWrapper& os, const BlankPadding<FILE *>& bp) {
+	os << std::string(' ', bp.width());
+	return os;
+}
+
+template<>
+class NewLine<FILE *> {
+};
+
+inline FileStreamWrapper& operator<<(FileStreamWrapper& os, const NewLine<FILE *>&) {
+	os << std::string("\n");
+	return os;
+}
+
+template<typename Stream>
 class Printer {
 public:
-
 	bool snippet;
 	ColorMode::type color_mode;
 	bool address;
@@ -1986,48 +2095,12 @@ public:
 		trace_context_size(7)
 		{}
 
-	template <typename ST>
-		FILE* print(ST& st, FILE* fp = stderr) {
-			cfile_streambuf obuf(fp);
-			std::ostream os(&obuf);
-			Colorize colorize(os);
-			colorize.activate(color_mode, fp);
-			print_stacktrace(st, os, colorize);
-			return fp;
-		}
-
-	template <typename ST>
-		std::ostream& print(ST& st, std::ostream& os) {
-			Colorize colorize(os);
-			colorize.activate(color_mode);
-			print_stacktrace(st, os, colorize);
-			return os;
-		}
-
-	template <typename IT>
-		FILE* print(IT begin, IT end, FILE* fp = stderr, size_t thread_id = 0) {
-			cfile_streambuf obuf(fp);
-			std::ostream os(&obuf);
-			Colorize colorize(os);
-			colorize.activate(color_mode, fp);
-			print_stacktrace(begin, end, os, thread_id, colorize);
-			return fp;
-		}
-
-	template <typename IT>
-		std::ostream& print(IT begin, IT end, std::ostream& os, size_t thread_id = 0) {
-			Colorize colorize(os);
-			colorize.activate(color_mode);
-			print_stacktrace(begin, end, os, thread_id, colorize);
-			return os;
-		}
-
-private:
+protected:
 	TraceResolver  _resolver;
 	SnippetFactory _snippets;
 
 	template <typename ST>
-		void print_stacktrace(ST& st, std::ostream& os, Colorize& colorize) {
+		void print_stacktrace(ST& st, Stream& os, Colorize<Stream>& colorize) {
 			print_header(os, st.thread_id());
 			_resolver.load_stacktrace(st);
 			for (size_t trace_idx = st.size(); trace_idx > 0; --trace_idx) {
@@ -2036,26 +2109,24 @@ private:
 		}
 
 	template <typename IT>
-		void print_stacktrace(IT begin, IT end, std::ostream& os, size_t thread_id, Colorize& colorize) {
+		void print_stacktrace(IT begin, IT end, Stream& os, size_t thread_id, Colorize<Stream>& colorize) {
 			print_header(os, thread_id);
 			for (; begin != end; ++begin) {
 				print_trace(os, *begin, colorize);
 			}
 		}
 
-	void print_header(std::ostream& os, size_t thread_id) {
+	void print_header(Stream& os, size_t thread_id) {
 		os << "Stack trace (most recent call last)";
 		if (thread_id) {
 			os << " in thread " << thread_id;
 		}
-		os << ":\n";
+		os << NewLine< Stream >();
 	}
 
-	void print_trace(std::ostream& os, const ResolvedTrace& trace,
-			Colorize& colorize) {
-		os << "#"
-		   << std::left << std::setw(2) << trace.idx
-		   << std::right;
+	void print_trace(Stream& os, const ResolvedTrace& trace,
+			Colorize<Stream>& colorize) {
+		os << "#" << BlankPadding<Stream>(2) << trace.idx;
 		bool already_indented = true;
 
 		if (!trace.source.filename.size() || object) {
@@ -2065,7 +2136,7 @@ private:
 			   << trace.addr
 			   << ", in "
 			   << trace.object_function
-			   << "\n";
+			   << NewLine<Stream>();
 			already_indented = false;
 		}
 
@@ -2096,12 +2167,10 @@ private:
 		}
 	}
 
-	void print_snippet(std::ostream& os, const char* indent,
+	void print_snippet(Stream& os, const char* indent,
 			const ResolvedTrace::SourceLoc& source_loc,
-			Colorize& colorize, Color::type color_code,
-			int context_size)
-	{
-		using namespace std;
+			Colorize<Stream>& colorize, Color::type color_code,
+			int context_size) {
 		typedef SnippetFactory::lines_t lines_t;
 
 		lines_t lines = _snippets.get_snippet(source_loc.filename,
@@ -2115,17 +2184,17 @@ private:
 			} else {
 				os << indent << " ";
 			}
-			os << std::setw(4) << it->first
+			os << BlankPadding<Stream>(4) << it->first
 			   << ": "
 			   << it->second
-			   << "\n";
+			   << NewLine<Stream>();
 			if (it-> first == source_loc.line) {
 				colorize.set_color(Color::reset);
 			}
 		}
 	}
 
-	void print_source_loc(std::ostream& os, const char* indent,
+	void print_source_loc(Stream& os, const char* indent,
 			const ResolvedTrace::SourceLoc& source_loc,
 			void* addr=0) {
 		os << indent
@@ -2139,7 +2208,69 @@ private:
 		if (address && addr != 0) {
 			os << " [" << addr << "]";
 		}
-		os << "\n";
+		os << NewLine<Stream>();
+	}
+};
+
+class StreamPrinter : public Printer<std::ostream> {
+public:
+	StreamPrinter(std::ostream& os) : _os(os) {}
+
+	template <typename ST>
+		void print(ST& st) {
+			Colorize<std::ostream> colorize(_os);
+			colorize.activate(color_mode);
+			print_stacktrace(st, _os, colorize);
+		}
+
+	template <typename IT>
+		void print(IT begin, IT end, size_t thread_id = 0) {
+			Colorize<std::ostream> colorize(_os);
+			colorize.activate(color_mode);
+			print_stacktrace(begin, end, thread_id, colorize);
+		}
+
+private:
+	std::ostream& _os;
+};
+
+class CErrPrinter {
+public:
+	typedef StreamPrinter PrinterImpl;
+	static PrinterImpl& get_instance() {
+		static PrinterImpl sp(std::cerr);
+		return sp;
+	}
+};
+
+class StdioPrinter : public Printer<FILE *> {
+public:
+	StdioPrinter(FILE* fp) : _fp(fp) {}
+
+	template <typename ST>
+		void print(ST& st) {
+			cfile_streambuf obuf(_fp);
+			std::ostream os(&obuf);
+			StreamPrinter(os).print(st);
+		}
+
+	template <typename IT>
+		void print(IT begin, IT end, size_t thread_id = 0) {
+			cfile_streambuf obuf(_fp);
+			std::ostream os(&obuf);
+			StreamPrinter(os).print(begin, end, thread_id);
+		}
+
+private:
+	FILE* _fp;
+};
+
+class StderrPrinter {
+public:
+	typedef StdioPrinter PrinterImpl;
+	static PrinterImpl& get_instance() {
+		static PrinterImpl sp(stderr);
+		return sp;
 	}
 };
 
@@ -2148,6 +2279,7 @@ private:
 #if defined(BACKWARD_SYSTEM_LINUX) || defined(BACKWARD_SYSTEM_DARWIN)
 
 
+template<typename Printer>
 class SignalHandling {
 public:
    static std::vector<int> make_default_signals() {
@@ -2235,9 +2367,9 @@ public:
 			st.load_here(32);
 		}
 
-		Printer printer;
+		typename Printer::PrinterImpl& printer = Printer::get_instance();
 		printer.address = true;
-		printer.print(st, stderr);
+		printer.print(st);
 
 #if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
 		psiginfo(info, 0);
@@ -2267,6 +2399,7 @@ private:
 
 #ifdef BACKWARD_SYSTEM_UNKNOWN
 
+template< typename Printer >
 class SignalHandling {
 public:
 	SignalHandling(const std::vector<int>& = std::vector<int>()) {}

@@ -27,6 +27,6 @@
 
 namespace backward {
 
-backward::SignalHandling sh;
+backward::SignalHandling<StderrPrinter> sh;
 
 } // namespace backward
