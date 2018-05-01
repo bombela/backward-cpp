@@ -138,6 +138,18 @@
 //    - apt-get install binutils-dev
 //    - g++/clang++ -lbfd ...
 //
+// #define BACKWARD_HAS_DWARF 1
+//  - libdwarf gives you the most juicy details out of your stack traces:
+//    - object filename
+//    - function name
+//    - source filename
+//    - line and column numbers
+//    - source code snippet (assuming the file is accessible)
+//    - variables name and values (if not optimized out)
+//  - You need to link with the lib "dwarf":
+//    - apt-get install libdwarf-dev
+//    - g++/clang++ -ldwarf ...
+//
 // #define BACKWARD_HAS_BACKTRACE_SYMBOL 1
 //  - backtrace provides minimal details for a stack trace:
 //    - object filename
@@ -151,19 +163,30 @@
 //
 #	if   BACKWARD_HAS_DW == 1
 #	elif BACKWARD_HAS_BFD == 1
+#   elif BACKWARD_HAS_DWARF == 1
 #	elif BACKWARD_HAS_BACKTRACE_SYMBOL == 1
 #	else
 #		undef  BACKWARD_HAS_DW
 #		define BACKWARD_HAS_DW 0
 #		undef  BACKWARD_HAS_BFD
 #		define BACKWARD_HAS_BFD 0
+#		undef  BACKWARD_HAS_DWARF
+#		define BACKWARD_HAS_DWARF 0
 #		undef  BACKWARD_HAS_BACKTRACE_SYMBOL
 #		define BACKWARD_HAS_BACKTRACE_SYMBOL 1
 #	endif
 
 #	include <cxxabi.h>
 #	include <fcntl.h>
+#	ifdef __ANDROID__
+//		Old Android API levels define _Unwind_Ptr in both link.h and unwind.h
+//		Rename the one in link.h as we are not going to be using it
+#		define _Unwind_Ptr _Unwind_Ptr_Custom
 #	include <link.h>
+#		undef _Unwind_Ptr
+#	else
+#	    include <link.h>
+#	endif
 #	include <sys/stat.h>
 #	include <syscall.h>
 #	include <unistd.h>
@@ -193,6 +216,21 @@
 #		include <elfutils/libdw.h>
 #		include <elfutils/libdwfl.h>
 #		include <dwarf.h>
+#	endif
+
+#	if BACKWARD_HAS_DWARF == 1
+#		include <libelf.h>
+#		include <dwarf.h>
+#		include <libdwarf.h>
+#		include <map>
+#		include <algorithm>
+#		ifndef _GNU_SOURCE
+#			define _GNU_SOURCE
+#			include <dlfcn.h>
+#			undef _GNU_SOURCE
+#		else
+#			include <dlfcn.h>
+#		endif
 #	endif
 
 #	if (BACKWARD_HAS_BACKTRACE == 1) || (BACKWARD_HAS_BACKTRACE_SYMBOL == 1)
@@ -337,12 +375,15 @@ namespace trace_resolver_tag {
 #if defined(BACKWARD_SYSTEM_LINUX)
 	struct libdw;
 	struct libbfd;
+	struct libdwarf;
 	struct backtrace_symbol;
 
 #	if   BACKWARD_HAS_DW == 1
 		typedef libdw current;
 #	elif BACKWARD_HAS_BFD == 1
 		typedef libbfd current;
+#	elif BACKWARD_HAS_DWARF == 1
+		typedef libdwarf current;
 #	elif BACKWARD_HAS_BACKTRACE_SYMBOL == 1
 		typedef backtrace_symbol current;
 #	else
@@ -589,7 +630,11 @@ public:
 protected:
 	void load_thread_info() {
 #ifdef BACKWARD_SYSTEM_LINUX
+#ifndef __ANDROID__
 		_thread_id = (size_t)syscall(SYS_gettid);
+#else
+		_thread_id = (size_t)gettid();
+#endif
 		if (_thread_id == (size_t) getpid()) {
 			// If the thread is the main one, let's hide that.
 			// I like to keep little secret sometimes.
@@ -1593,6 +1638,1450 @@ private:
 
 };
 #endif // BACKWARD_HAS_DW == 1
+
+#if BACKWARD_HAS_DWARF == 1
+
+template <>
+class TraceResolverLinuxImpl<trace_resolver_tag::libdwarf>:
+	public TraceResolverImplBase {
+	static std::string read_symlink(std::string const & symlink_path) {
+		std::string path;
+		path.resize(100);
+
+		while(true) {
+			ssize_t len = ::readlink(symlink_path.c_str(),
+									&*path.begin(), path.size());
+			if(len < 0) {
+				return "";
+			}
+			if ((size_t)len == path.size()) {
+				path.resize(path.size() * 2);
+			}
+			else {
+				path.resize(len);
+				break;
+			}
+		}
+
+		return path;
+	}
+public:
+	TraceResolverLinuxImpl(): _dwarf_loaded(false) {}
+
+	template <class ST>
+		void load_stacktrace(ST&) {}
+
+	ResolvedTrace resolve(ResolvedTrace trace) {
+		// trace.addr is a virtual address in memory pointing to some code.
+		// Let's try to find from which loaded object it comes from.
+		// The loaded object can be yourself btw.
+
+		Dl_info symbol_info;
+		int dladdr_result = 0;
+#ifndef __ANDROID__
+		link_map *link_map;
+		// We request the link map so we can get information about offsets
+		dladdr_result = dladdr1(trace.addr, &symbol_info,
+				reinterpret_cast<void**>(&link_map), RTLD_DL_LINKMAP);
+#else
+		// Android doesn't have dladdr1. Don't use the linker map.
+		dladdr_result = dladdr(trace.addr, &symbol_info);
+#endif
+		if (!dladdr_result) {
+			return trace; // dat broken trace...
+		}
+
+		std::string argv0;
+		{
+			std::ifstream ifs("/proc/self/cmdline");
+			std::getline(ifs, argv0, '\0');
+		}
+		std::string tmp;
+		if(symbol_info.dli_fname == argv0) {
+			tmp = read_symlink("/proc/self/exe");
+			symbol_info.dli_fname = tmp.c_str();
+		}
+
+		// Now we get in symbol_info:
+		// .dli_fname:
+		//      pathname of the shared object that contains the address.
+		// .dli_fbase:
+		//      where the object is loaded in memory.
+		// .dli_sname:
+		//      the name of the nearest symbol to trace.addr, we expect a
+		//      function name.
+		// .dli_saddr:
+		//      the exact address corresponding to .dli_sname.
+		//
+		// And in link_map:
+		// .l_addr:
+		//      difference between the address in the ELF file and the address
+		//      in memory
+		// l_name:
+		//      absolute pathname where the object was found
+
+		if (symbol_info.dli_sname) {
+			trace.object_function = demangle(symbol_info.dli_sname);
+		}
+
+		if (!symbol_info.dli_fname) {
+			return trace;
+		}
+
+		trace.object_filename = symbol_info.dli_fname;
+		dwarf_fileobject& fobj = load_object_with_dwarf(symbol_info.dli_fname);
+		if (!fobj.dwarf_handle) {
+			return trace; // sad, we couldn't load the object :(
+		}
+
+#ifndef __ANDROID__
+		// Convert the address to a module relative one by looking at
+		// the module's loading address in the link map
+		Dwarf_Addr address = reinterpret_cast<uintptr_t>(trace.addr) -
+				reinterpret_cast<uintptr_t>(link_map->l_addr);
+#else
+		Dwarf_Addr address = reinterpret_cast<uintptr_t>(trace.addr);
+#endif
+
+		if (trace.object_function.empty()) {
+			symbol_cache_t::iterator it =
+					fobj.symbol_cache.lower_bound(address);
+
+			if (it != fobj.symbol_cache.end()) {
+				if (it->first != address) {
+					if (it != fobj.symbol_cache.begin()) {
+						--it;
+					}
+				}
+				trace.object_function = demangle(it->second.c_str());
+			}
+		}
+
+		// Get the Compilation Unit DIE for the address
+		Dwarf_Die die = find_die(fobj, address);
+
+		if (!die) {
+			return trace; // this time we lost the game :/
+		}
+
+		// libdwarf doesn't give us direct access to its objects, it always
+		// allocates a copy for the caller. We keep that copy alive in a cache
+		// and we deallocate it later when it's no longer required.
+		die_cache_entry& die_object = get_die_cache(fobj, die);
+		if (die_object.isEmpty())
+			return trace;  // We have no line section for this DIE
+
+		die_linemap_t::iterator it =
+				die_object.line_section.lower_bound(address);
+
+		if (it != die_object.line_section.end()) {
+			if (it->first != address) {
+				if (it == die_object.line_section.begin()) {
+					// If we are on the first item of the line section
+					// but the address does not match it means that
+					// the address is below the range of the DIE. Give up.
+					return trace;
+				} else {
+					--it;
+				}
+			}
+		} else {
+			return trace; // We didn't find the address.
+		}
+
+		// Get the Dwarf_Line that the address points to and call libdwarf
+		// to get source file, line and column info.
+		Dwarf_Line line = die_object.line_buffer[it->second];
+		Dwarf_Error error = DW_DLE_NE;
+
+		char* filename;
+		if (dwarf_linesrc(line, &filename, &error)
+				== DW_DLV_OK) {
+			trace.source.filename = std::string(filename);
+			dwarf_dealloc(fobj.dwarf_handle.get(), filename, DW_DLA_STRING);
+		}
+
+		Dwarf_Unsigned number = 0;
+		if (dwarf_lineno(line, &number, &error) == DW_DLV_OK) {
+			trace.source.line = number;
+		} else {
+			trace.source.line = 0;
+		}
+
+		if (dwarf_lineoff_b(line, &number, &error) == DW_DLV_OK) {
+			trace.source.col = number;
+		} else {
+			trace.source.col = 0;
+		}
+
+		std::vector<std::string> namespace_stack;
+		deep_first_search_by_pc(fobj, die, address, namespace_stack,
+				inliners_search_cb(trace, fobj, die));
+
+		dwarf_dealloc(fobj.dwarf_handle.get(), die, DW_DLA_DIE);
+
+		return trace;
+	}
+
+public:
+	static int close_dwarf(Dwarf_Debug dwarf) {
+		return dwarf_finish(dwarf, NULL);
+	}
+
+private:
+	bool                _dwarf_loaded;
+
+	typedef details::handle<int,
+					details::deleter<int, int, &::close>
+							> dwarf_file_t;
+
+	typedef details::handle<Elf*,
+					details::deleter<int, Elf*, &elf_end>
+							> dwarf_elf_t;
+
+	typedef details::handle<Dwarf_Debug,
+					details::deleter<int, Dwarf_Debug, &close_dwarf>
+							> dwarf_handle_t;
+
+	typedef std::map<Dwarf_Addr, int>		die_linemap_t;
+
+	typedef std::map<Dwarf_Off, Dwarf_Off>	die_specmap_t;
+
+	struct die_cache_entry {
+		die_specmap_t			spec_section;
+		die_linemap_t			line_section;
+		Dwarf_Line*				line_buffer;
+		Dwarf_Signed			line_count;
+		Dwarf_Line_Context		line_context;
+
+		inline bool isEmpty() {
+			return  line_buffer == NULL ||
+					line_count == 0 ||
+					line_context == NULL ||
+					line_section.empty();
+		}
+
+		die_cache_entry() :
+			line_buffer(0), line_count(0), line_context(0) {}
+
+		~die_cache_entry()
+		{
+			if (line_context) {
+				dwarf_srclines_dealloc_b(line_context);
+			}
+		}
+	};
+
+	typedef std::map<Dwarf_Off, die_cache_entry> die_cache_t;
+
+	typedef std::map<uintptr_t, std::string>     symbol_cache_t;
+
+	struct dwarf_fileobject {
+		dwarf_file_t		file_handle;
+		dwarf_elf_t			elf_handle;
+		dwarf_handle_t		dwarf_handle;
+		symbol_cache_t		symbol_cache;
+
+		// Die cache
+		die_cache_t     	die_cache;
+		die_cache_entry*	current_cu;
+	};
+
+	typedef details::hashtable<std::string, dwarf_fileobject>::type
+			fobj_dwarf_map_t;
+	fobj_dwarf_map_t    _fobj_dwarf_map;
+
+	static bool cstrings_eq(const char* a, const char* b) {
+		if (!a || !b) {
+			return false;
+		}
+		return strcmp(a, b) == 0;
+	}
+
+	dwarf_fileobject& load_object_with_dwarf(
+			const std::string filename_object) {
+
+		if (!_dwarf_loaded) {
+			// Set the ELF library operating version
+			// If that fails there's nothing we can do
+			_dwarf_loaded = elf_version(EV_CURRENT) != EV_NONE;
+		}
+
+		fobj_dwarf_map_t::iterator it =
+				_fobj_dwarf_map.find(filename_object);
+		if (it != _fobj_dwarf_map.end()) {
+				return it->second;
+		}
+
+		// this new object is empty for now
+		dwarf_fileobject& r = _fobj_dwarf_map[filename_object];
+
+		dwarf_file_t file_handle;
+		file_handle.reset(open(filename_object.c_str(), O_RDONLY));
+		if (file_handle < 0) {
+			return r;
+		}
+
+		// Try to get an ELF handle. We need to read the ELF sections
+		// because we want to see if there is a .gnu_debuglink section
+		// that points to a split debug file
+		dwarf_elf_t elf_handle;
+		elf_handle.reset(elf_begin(file_handle.get(), ELF_C_READ, NULL));
+		if (!elf_handle) {
+			return r;
+		}
+
+		const char* e_ident = elf_getident(elf_handle.get(), 0);
+		if (!e_ident) {
+			return r;
+		}
+
+		// Get the number of sections
+		// We use the new APIs as elf_getshnum is deprecated
+		size_t shdrnum = 0;
+		if (elf_getshdrnum(elf_handle.get(), &shdrnum) == -1) {
+			return r;
+		}
+
+		// Get the index to the string section
+		size_t shdrstrndx = 0;
+		if (elf_getshdrstrndx (elf_handle.get(), &shdrstrndx) == -1) {
+			return r;
+		}
+
+		std::string debuglink;
+		// Iterate through the ELF sections to try to get a gnu_debuglink
+		// note and also to cache the symbol table.
+		// We go the preprocessor way to avoid having to create templated
+		// classes or using gelf (which might throw a compiler error if 64 bit
+		// is not supported
+#define ELF_GET_DATA(ARCH)                                                   \
+		Elf_Scn *elf_section = 0;                                            \
+		Elf_Data *elf_data = 0;                                              \
+		Elf##ARCH##_Shdr* section_header = 0;                                \
+		Elf_Scn *symbol_section = 0;                                         \
+		size_t symbol_count = 0;                                             \
+		size_t symbol_strings = 0;                                           \
+		Elf##ARCH##_Sym *symbol = 0;                                         \
+		const char* section_name = 0;                                        \
+		                                                                     \
+		while ((elf_section = elf_nextscn(elf_handle.get(), elf_section))    \
+				!= NULL) {                                                   \
+			section_header = elf##ARCH##_getshdr(elf_section);               \
+			if (section_header == NULL) {                                    \
+				return r;                                                    \
+			}                                                                \
+		                                                                     \
+			if ((section_name = elf_strptr(                                  \
+								elf_handle.get(), shdrstrndx,                \
+								section_header->sh_name)) == NULL) {         \
+				return r;                                                    \
+			}                                                                \
+		                                                                     \
+			if (cstrings_eq(section_name, ".gnu_debuglink")) {               \
+				elf_data = elf_getdata(elf_section, NULL);                   \
+				if (elf_data && elf_data->d_size > 0) {                      \
+					debuglink = std::string(                                 \
+							reinterpret_cast<const char*>(elf_data->d_buf)); \
+				}                                                            \
+			}                                                                \
+		                                                                     \
+			switch(section_header->sh_type) {                                \
+				case SHT_SYMTAB:                                             \
+					symbol_section = elf_section;                            \
+					symbol_count   = section_header->sh_size /               \
+									section_header->sh_entsize;              \
+					symbol_strings = section_header->sh_link;                \
+					break;                                                   \
+		                                                                     \
+				/* We use .dynsyms as a last resort, we prefer .symtab */    \
+				case SHT_DYNSYM:                                             \
+					if (!symbol_section) {                                   \
+						symbol_section = elf_section;                        \
+						symbol_count   = section_header->sh_size /           \
+										section_header->sh_entsize;          \
+						symbol_strings = section_header->sh_link;            \
+					}                                                        \
+					break;                                                   \
+			}                                                                \
+		}                                                                    \
+		                                                                     \
+		if (symbol_section && symbol_count && symbol_strings) {              \
+			elf_data = elf_getdata(symbol_section, NULL);                    \
+			symbol = reinterpret_cast<Elf##ARCH##_Sym*>(elf_data->d_buf);    \
+			for (size_t i = 0; i < symbol_count; ++i) {                      \
+				int type = ELF##ARCH##_ST_TYPE(symbol->st_info);             \
+				if (type == STT_FUNC && symbol->st_value > 0) {              \
+					r.symbol_cache[symbol->st_value] = std::string(          \
+							elf_strptr(elf_handle.get(),                     \
+							symbol_strings, symbol->st_name));               \
+				}                                                            \
+				++symbol;                                                    \
+			}                                                                \
+		}                                                                    \
+
+
+		if (e_ident[EI_CLASS] == ELFCLASS32) {
+			ELF_GET_DATA(32)
+		} else if (e_ident[EI_CLASS] == ELFCLASS64) {
+		// libelf might have been built without 64 bit support
+#if __LIBELF64
+			ELF_GET_DATA(64)
+#endif
+		}
+
+		if (!debuglink.empty()) {
+			// We have a debuglink section! Open an elf instance on that
+			// file instead. If we can't open the file, then return
+			// the elf handle we had already opened.
+			dwarf_file_t debuglink_file;
+			debuglink_file.reset(open(debuglink.c_str(), O_RDONLY));
+			if (debuglink_file.get() > 0) {
+				dwarf_elf_t debuglink_elf;
+				debuglink_elf.reset(
+					elf_begin(debuglink_file.get(),ELF_C_READ, NULL)
+				);
+
+				// If we have a valid elf handle, return the new elf handle
+				// and file handle and discard the original ones
+				if (debuglink_elf) {
+					elf_handle = move(debuglink_elf);
+					file_handle = move(debuglink_file);
+				}
+			}
+		}
+
+		// Ok, we have a valid ELF handle, let's try to get debug symbols
+		Dwarf_Debug dwarf_debug;
+		Dwarf_Error error = DW_DLE_NE;
+		dwarf_handle_t dwarf_handle;
+
+		int dwarf_result = dwarf_elf_init(elf_handle.get(),
+						DW_DLC_READ, NULL, NULL, &dwarf_debug, &error);
+
+		// We don't do any special handling for DW_DLV_NO_ENTRY specially.
+		// If we get an error, or the file doesn't have debug information
+		// we just return.
+		if (dwarf_result != DW_DLV_OK) {
+			return r;
+		}
+
+		dwarf_handle.reset(dwarf_debug);
+
+		r.file_handle = move(file_handle);
+		r.elf_handle = move(elf_handle);
+		r.dwarf_handle = move(dwarf_handle);
+
+		return r;
+	}
+
+	die_cache_entry& get_die_cache(dwarf_fileobject& fobj, Dwarf_Die die)
+	{
+		Dwarf_Error error = DW_DLE_NE;
+
+		// Get the die offset, we use it as the cache key
+		Dwarf_Off die_offset;
+		if (dwarf_dieoffset(die, &die_offset, &error) != DW_DLV_OK) {
+			die_offset = 0;
+		}
+
+		die_cache_t::iterator it = fobj.die_cache.find(die_offset);
+
+		if (it != fobj.die_cache.end()) {
+			fobj.current_cu = &it->second;
+			return it->second;
+		}
+
+		die_cache_entry& de = fobj.die_cache[die_offset];
+		fobj.current_cu = &de;
+
+		Dwarf_Addr line_addr;
+		Dwarf_Small table_count;
+
+		// The addresses in the line section are not fully sorted (they might
+		// be sorted by block of code belonging to the same file), which makes
+		// it necessary to do so before searching is possible.
+		//
+		// As libdwarf allocates a copy of everything, let's get the contents
+		// of the line section and keep it around. We also create a map of
+		// program counter to line table indices so we can search by address
+		// and get the line buffer index.
+		//
+		// To make things more difficult, the same address can span more than
+		// one line, so we need to keep the index pointing to the first line
+		// by using insert instead of the map's [ operator.
+
+		// Get the line context for the DIE
+		if (dwarf_srclines_b(die, 0, &table_count, &de.line_context, &error)
+				== DW_DLV_OK) {
+			// Get the source lines for this line context, to be deallocated
+			// later
+			if (dwarf_srclines_from_linecontext(
+					de.line_context, &de.line_buffer, &de.line_count, &error)
+						== DW_DLV_OK) {
+
+				// Add all the addresses to our map
+				for (int i = 0; i < de.line_count; i++) {
+					if (dwarf_lineaddr(de.line_buffer[i], &line_addr, &error)
+							!= DW_DLV_OK) {
+						line_addr = 0;
+					}
+					de.line_section.insert(
+							std::pair<Dwarf_Addr, int>(line_addr, i));
+				}
+			}
+		}
+
+		// For each CU, cache the function DIEs that contain the
+		// DW_AT_specification attribute. When building with -g3 the function
+		// DIEs are separated in declaration and specification, with the
+		// declaration containing only the name and parameters and the
+		// specification the low/high pc and other compiler attributes.
+		//
+		// We cache those specifications so we don't skip over the declarations,
+		// because they have no pc, and we can do namespace resolution for
+		// DWARF function names.
+		Dwarf_Debug dwarf = fobj.dwarf_handle.get();
+		Dwarf_Die current_die = 0;
+		if (dwarf_child(die, &current_die, &error) == DW_DLV_OK) {
+			for(;;) {
+				Dwarf_Die sibling_die = 0;
+
+				Dwarf_Half tag_value;
+				dwarf_tag(current_die, &tag_value, &error);
+
+				if (tag_value == DW_TAG_subprogram ||
+					tag_value == DW_TAG_inlined_subroutine) {
+
+					Dwarf_Bool has_attr = 0;
+					if (dwarf_hasattr(current_die, DW_AT_specification,
+									  &has_attr, &error) == DW_DLV_OK) {
+						if (has_attr) {
+							Dwarf_Attribute attr_mem;
+							if (dwarf_attr(current_die, DW_AT_specification,
+											&attr_mem, &error) == DW_DLV_OK) {
+								Dwarf_Off spec_offset = 0;
+								if (dwarf_formref(attr_mem,
+										&spec_offset, &error) == DW_DLV_OK) {
+									Dwarf_Off spec_die_offset;
+									if (dwarf_dieoffset(current_die,
+											&spec_die_offset, &error)
+											== DW_DLV_OK) {
+										de.spec_section[spec_offset] =
+												spec_die_offset;
+									}
+								}
+							}
+							dwarf_dealloc(dwarf, attr_mem, DW_DLA_ATTR);
+						}
+					}
+				}
+
+				int result = dwarf_siblingof(
+						dwarf, current_die, &sibling_die, &error);
+				if (result == DW_DLV_ERROR) {
+					break;
+				} else if (result == DW_DLV_NO_ENTRY) {
+					break;
+				}
+
+				if (current_die != die) {
+					dwarf_dealloc(dwarf, current_die, DW_DLA_DIE);
+					current_die = 0;
+				}
+
+				current_die = sibling_die;
+			}
+		}
+		return de;
+	}
+
+	static Dwarf_Die get_referenced_die(
+			Dwarf_Debug dwarf, Dwarf_Die die, Dwarf_Half attr, bool global) {
+		Dwarf_Error error = DW_DLE_NE;
+		Dwarf_Attribute attr_mem;
+
+		Dwarf_Die found_die = NULL;
+		if (dwarf_attr(die, attr, &attr_mem, &error) == DW_DLV_OK) {
+			Dwarf_Off offset;
+			int result = 0;
+			if (global) {
+				result = dwarf_global_formref(attr_mem, &offset, &error);
+			} else {
+				result = dwarf_formref(attr_mem, &offset, &error);
+			}
+
+			if (result == DW_DLV_OK) {
+				if (dwarf_offdie(dwarf, offset, &found_die, &error)
+						!= DW_DLV_OK) {
+					found_die = NULL;
+				}
+			}
+			dwarf_dealloc(dwarf, attr_mem, DW_DLA_ATTR);
+		}
+		return found_die;
+	}
+
+	static std::string get_referenced_die_name(
+			Dwarf_Debug dwarf, Dwarf_Die die, Dwarf_Half attr, bool global) {
+		Dwarf_Error error = DW_DLE_NE;
+		std::string value;
+
+		Dwarf_Die found_die = get_referenced_die(dwarf, die, attr, global);
+
+		if (found_die) {
+			char *name;
+			if (dwarf_diename(found_die, &name, &error) == DW_DLV_OK) {
+				if (name) {
+					value = std::string(name);
+				}
+				dwarf_dealloc(dwarf, name, DW_DLA_STRING);
+			}
+			dwarf_dealloc(dwarf, found_die, DW_DLA_DIE);
+		}
+
+		return value;
+	}
+
+	// Returns a spec DIE linked to the passed one. The caller should
+	// deallocate the DIE
+	static Dwarf_Die get_spec_die(dwarf_fileobject& fobj, Dwarf_Die die) {
+		Dwarf_Debug dwarf = fobj.dwarf_handle.get();
+		Dwarf_Error error = DW_DLE_NE;
+		Dwarf_Off die_offset;
+		if (fobj.current_cu && dwarf_die_CU_offset(die, &die_offset, &error)
+				== DW_DLV_OK) {
+			die_specmap_t::iterator it =
+					fobj.current_cu->spec_section.find(die_offset);
+
+			// If we have a DIE that completes the current one, check if
+			// that one has the pc we are looking for
+			if (it != fobj.current_cu->spec_section.end()) {
+				Dwarf_Die spec_die = 0;
+				if (dwarf_offdie(dwarf, it->second, &spec_die, &error)
+						== DW_DLV_OK) {
+					return spec_die;
+				}
+			}
+		}
+
+		// Maybe we have an abstract origin DIE with the function information?
+		return get_referenced_die(
+				fobj.dwarf_handle.get(), die, DW_AT_abstract_origin, true);
+
+	}
+
+	static bool die_has_pc(dwarf_fileobject& fobj, Dwarf_Die die, Dwarf_Addr pc)
+	{
+		Dwarf_Addr low_pc = 0, high_pc = 0;
+		Dwarf_Half high_pc_form = 0;
+		Dwarf_Form_Class return_class;
+		Dwarf_Error error = DW_DLE_NE;
+		Dwarf_Debug dwarf = fobj.dwarf_handle.get();
+		bool has_lowpc = false;
+		bool has_highpc = false;
+		bool has_ranges = false;
+
+		if (dwarf_lowpc(die, &low_pc, &error) == DW_DLV_OK) {
+			// If we have a low_pc check if there is a high pc.
+			// If we don't have a high pc this might mean we have a base
+			// address for the ranges list or just an address.
+			has_lowpc = true;
+
+			if (dwarf_highpc_b(
+					die, &high_pc, &high_pc_form, &return_class, &error)
+					== DW_DLV_OK) {
+				// We do have a high pc. In DWARF 4+ this is an offset from the
+				// low pc, but in earlier versions it's an absolute address.
+
+				has_highpc = true;
+				// In DWARF 2/3 this would be a DW_FORM_CLASS_ADDRESS
+				if (return_class == DW_FORM_CLASS_CONSTANT) {
+					high_pc = low_pc + high_pc;
+				}
+
+				// We have low and high pc, check if our address
+				// is in that range
+				return pc >= low_pc && pc < high_pc;
+			}
+		} else {
+			// Reset the low_pc, in case dwarf_lowpc failing set it to some
+			// undefined value.
+			low_pc = 0;
+		}
+
+		// Check if DW_AT_ranges is present and search for the PC in the
+		// returned ranges list. We always add the low_pc, as it not set it will
+		// be 0, in case we had a DW_AT_low_pc and DW_AT_ranges pair
+		bool result = false;
+
+		Dwarf_Attribute attr;
+		if (dwarf_attr(die, DW_AT_ranges, &attr, &error) == DW_DLV_OK) {
+
+			Dwarf_Off offset;
+			if (dwarf_global_formref(attr, &offset, &error) == DW_DLV_OK) {
+				Dwarf_Ranges *ranges;
+				Dwarf_Signed ranges_count = 0;
+				Dwarf_Unsigned byte_count = 0;
+
+				if (dwarf_get_ranges_a(dwarf, offset, die, &ranges,
+						&ranges_count, &byte_count, &error) == DW_DLV_OK) {
+					has_ranges = ranges_count != 0;
+					for (int i = 0; i < ranges_count; i++) {
+						if (pc >= ranges[i].dwr_addr1 + low_pc &&
+							pc < ranges[i].dwr_addr2 + low_pc) {
+							result = true;
+							break;
+						}
+					}
+					dwarf_ranges_dealloc(dwarf, ranges, ranges_count);
+				}
+			}
+		}
+
+		// Last attempt. We might have a single address set as low_pc.
+		if (!result && low_pc != 0 && pc == low_pc) {
+			result = true;
+		}
+
+		// If we don't have lowpc, highpc and ranges maybe this DIE is a
+		// declaration that relies on a DW_AT_specification DIE that happens
+		// later. Use the specification cache we filled when we loaded this CU.
+		if (!result && (!has_lowpc && !has_highpc && !has_ranges)) {
+			Dwarf_Die spec_die = get_spec_die(fobj, die);
+			if (spec_die) {
+				result = die_has_pc(fobj, spec_die, pc);
+				dwarf_dealloc(dwarf, spec_die, DW_DLA_DIE);
+			}
+		}
+
+		return result;
+	}
+
+	static void get_type(Dwarf_Debug dwarf, Dwarf_Die die, std::string& type) {
+		Dwarf_Error error = DW_DLE_NE;
+
+		Dwarf_Die child = 0;
+		if (dwarf_child(die, &child, &error) == DW_DLV_OK) {
+			get_type(dwarf, child, type);
+		}
+
+		if (child) {
+			type.insert(0, "::");
+			dwarf_dealloc(dwarf, child, DW_DLA_DIE);
+		}
+
+		char *name;
+		if (dwarf_diename(die, &name, &error) == DW_DLV_OK) {
+			type.insert(0, std::string(name));
+			dwarf_dealloc(dwarf, name, DW_DLA_STRING);
+		} else {
+			type.insert(0,"<unknown>");
+		}
+	}
+
+	static std::string get_type_by_signature(Dwarf_Debug dwarf, Dwarf_Die die) {
+		Dwarf_Error error = DW_DLE_NE;
+
+		Dwarf_Sig8 signature;
+		Dwarf_Bool has_attr = 0;
+		if (dwarf_hasattr(die, DW_AT_signature,
+						  &has_attr, &error) == DW_DLV_OK) {
+			if (has_attr) {
+				Dwarf_Attribute attr_mem;
+				if (dwarf_attr(die, DW_AT_signature,
+								&attr_mem, &error) == DW_DLV_OK) {
+					if (dwarf_formsig8(attr_mem, &signature, &error)
+							!= DW_DLV_OK) {
+						return std::string("<no type signature>");
+					}
+				}
+				dwarf_dealloc(dwarf, attr_mem, DW_DLA_ATTR);
+			}
+		}
+
+		Dwarf_Unsigned next_cu_header;
+		Dwarf_Sig8 tu_signature;
+		std::string result;
+		bool found = false;
+
+		while (dwarf_next_cu_header_d(dwarf, 0, 0, 0, 0, 0, 0, 0, &tu_signature,
+				0, &next_cu_header, 0, &error) == DW_DLV_OK) {
+
+			if (strncmp(signature.signature, tu_signature.signature, 8) == 0) {
+				Dwarf_Die type_cu_die = 0;
+				if (dwarf_siblingof_b(dwarf, 0, 0, &type_cu_die, &error)
+						== DW_DLV_OK) {
+					Dwarf_Die child_die = 0;
+					if (dwarf_child(type_cu_die, &child_die, &error)
+							== DW_DLV_OK) {
+						get_type(dwarf, child_die, result);
+						found = !result.empty();
+						dwarf_dealloc(dwarf, child_die, DW_DLA_DIE);
+					}
+					dwarf_dealloc(dwarf, type_cu_die, DW_DLA_DIE);
+				}
+			}
+		}
+
+		if (found) {
+			while (dwarf_next_cu_header_d(dwarf, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+					&next_cu_header, 0, &error) == DW_DLV_OK) {
+				// Reset the cu header state. Unfortunately, libdwarf's
+				// next_cu_header API keeps its own iterator per Dwarf_Debug that
+				// can't be reset. We need to keep fetching elements until the end.
+			}
+		} else {
+			// If we couldn't resolve the type just print out the signature
+			std::ostringstream string_stream;
+			string_stream << "<0x" <<
+					std::hex << std::setfill('0');
+			for (int i = 0; i < 8; ++i) {
+				string_stream << std::setw(2) << std::hex << (int)(unsigned char)(signature.signature[i]);
+			}
+			string_stream << ">";
+			result = string_stream.str();
+		}
+		return result;
+	}
+
+	struct type_context_t {
+		bool is_const;
+		bool is_typedef;
+		bool has_type;
+		bool has_name;
+		std::string text;
+
+		type_context_t() :
+			is_const(false), is_typedef(false),
+			has_type(false), has_name(false) {}
+	};
+
+	// Types are resolved from right to left: we get the variable name first
+	// and then all specifiers (like const or pointer) in a chain of DW_AT_type
+	// DIEs. Call this function recursively until we get a complete type
+	// string.
+	static void set_parameter_string(
+			dwarf_fileobject& fobj, Dwarf_Die die, type_context_t &context) {
+		char *name;
+		Dwarf_Error error = DW_DLE_NE;
+
+		// typedefs contain also the base type, so we skip it and only
+		// print the typedef name
+		if (!context.is_typedef) {
+			if (dwarf_diename(die, &name, &error) == DW_DLV_OK) {
+				if (!context.text.empty()) {
+					context.text.insert(0, " ");
+				}
+				context.text.insert(0, std::string(name));
+				dwarf_dealloc(fobj.dwarf_handle.get(), name, DW_DLA_STRING);
+			}
+		} else {
+			context.is_typedef = false;
+			context.has_type = true;
+			if (context.is_const) {
+				context.text.insert(0, "const ");
+				context.is_const = false;
+			}
+		}
+
+		bool next_type_is_const = false;
+		bool is_keyword = true;
+
+		Dwarf_Half tag = 0;
+		Dwarf_Bool has_attr = 0;
+		if (dwarf_tag(die, &tag, &error) == DW_DLV_OK) {
+			switch(tag) {
+			case DW_TAG_structure_type:
+			case DW_TAG_union_type:
+			case DW_TAG_class_type:
+			case DW_TAG_enumeration_type:
+				context.has_type = true;
+				if (dwarf_hasattr(die, DW_AT_signature,
+								  &has_attr, &error) == DW_DLV_OK) {
+					// If we have a signature it means the type is defined
+					// in .debug_types, so we need to load the DIE pointed
+					// at by the signature and resolve it
+					if (has_attr) {
+						std::string type =
+							get_type_by_signature(fobj.dwarf_handle.get(), die);
+						if (context.is_const)
+							type.insert(0, "const ");
+
+						if (!context.text.empty())
+							context.text.insert(0, " ");
+						context.text.insert(0, type);
+					}
+
+					// Treat enums like typedefs, and skip printing its
+					// base type
+					context.is_typedef = (tag == DW_TAG_enumeration_type);
+				}
+				break;
+			case DW_TAG_const_type:
+				next_type_is_const = true;
+				break;
+			case DW_TAG_pointer_type:
+				context.text.insert(0, "*");
+				break;
+			case DW_TAG_reference_type:
+				context.text.insert(0, "&");
+				break;
+			case DW_TAG_restrict_type:
+				context.text.insert(0, "restrict ");
+				break;
+			case DW_TAG_rvalue_reference_type:
+				context.text.insert(0, "&&");
+				break;
+			case DW_TAG_volatile_type:
+				context.text.insert(0, "volatile ");
+				break;
+			case DW_TAG_typedef:
+				// Propagate the const-ness to the next type
+				// as typedefs are linked to its base type
+				next_type_is_const = context.is_const;
+				context.is_typedef = true;
+				context.has_type = true;
+				break;
+			case DW_TAG_base_type:
+				context.has_type = true;
+				break;
+			case DW_TAG_formal_parameter:
+				context.has_name = true;
+				break;
+			default:
+				is_keyword = false;
+				break;
+			}
+		}
+
+		if (!is_keyword && context.is_const) {
+			context.text.insert(0, "const ");
+		}
+
+		context.is_const = next_type_is_const;
+
+		Dwarf_Die ref = get_referenced_die(fobj.dwarf_handle.get(), die, DW_AT_type, true);
+		if (ref) {
+			set_parameter_string(fobj, ref, context);
+			dwarf_dealloc(fobj.dwarf_handle.get(), ref, DW_DLA_DIE);
+		}
+
+		if (!context.has_type && context.has_name) {
+			context.text.insert(0, "void ");
+			context.has_type = true;
+		}
+	}
+
+	// Resolve the function return type and parameters
+	static void set_function_parameters(std::string& function_name,
+										std::vector<std::string>& ns,
+										dwarf_fileobject& fobj, Dwarf_Die die) {
+		Dwarf_Debug dwarf = fobj.dwarf_handle.get();
+		Dwarf_Error error = DW_DLE_NE;
+		Dwarf_Die current_die = 0;
+		std::string parameters;
+		bool has_spec = true;
+		// Check if we have a spec DIE. If we do we use it as it contains
+		// more information, like parameter names.
+		Dwarf_Die spec_die = get_spec_die(fobj, die);
+		if (!spec_die) {
+			has_spec = false;
+			spec_die = die;
+		}
+
+		std::vector<std::string>::const_iterator it = ns.begin();
+		std::string ns_name;
+		for (it = ns.begin(); it < ns.end(); ++it) {
+			ns_name.append(*it).append("::");
+		}
+
+		if (!ns_name.empty()) {
+			function_name.insert(0, ns_name);
+		}
+
+		// See if we have a function return type. It can be either on the
+		// current die or in its spec one (usually true for inlined functions)
+		std::string return_type =
+				get_referenced_die_name(dwarf, die, DW_AT_type, true);
+		if (return_type.empty()) {
+			return_type =
+				get_referenced_die_name(dwarf, spec_die, DW_AT_type, true);
+		}
+		if (!return_type.empty()) {
+			return_type.append(" ");
+			function_name.insert(0, return_type);
+		}
+
+		if (dwarf_child(spec_die, &current_die, &error) == DW_DLV_OK) {
+			for(;;) {
+				Dwarf_Die sibling_die = 0;
+
+				Dwarf_Half tag_value;
+				dwarf_tag(current_die, &tag_value, &error);
+
+				if (tag_value == DW_TAG_formal_parameter) {
+					// Ignore artificial (ie, compiler generated) parameters
+					bool is_artificial = false;
+					Dwarf_Attribute attr_mem;
+					if (dwarf_attr(
+							current_die, DW_AT_artificial, &attr_mem, &error)
+							== DW_DLV_OK) {
+						Dwarf_Bool flag = 0;
+						if (dwarf_formflag(attr_mem, &flag, &error)
+								== DW_DLV_OK) {
+							is_artificial = flag != 0;
+						}
+						dwarf_dealloc(dwarf, attr_mem, DW_DLA_ATTR);
+					}
+
+					if (!is_artificial) {
+						type_context_t context;
+						set_parameter_string(fobj, current_die, context);
+
+						if (parameters.empty()) {
+							parameters.append("(");
+						} else {
+							parameters.append(", ");
+						}
+						parameters.append(context.text);
+					}
+				}
+
+				int result = dwarf_siblingof(
+						dwarf, current_die, &sibling_die, &error);
+				if (result == DW_DLV_ERROR) {
+					break;
+				} else if (result == DW_DLV_NO_ENTRY) {
+					break;
+				}
+
+				if (current_die != die) {
+					dwarf_dealloc(dwarf, current_die, DW_DLA_DIE);
+					current_die = 0;
+				}
+
+				current_die = sibling_die;
+			}
+		}
+		if (parameters.empty())
+			parameters = "(";
+		parameters.append(")");
+
+		// If we got a spec DIE we need to deallocate it
+		if (has_spec)
+			dwarf_dealloc(dwarf, spec_die, DW_DLA_DIE);
+
+		function_name.append(parameters);
+	}
+
+	// defined here because in C++98, template function cannot take locally
+	// defined types... grrr.
+	struct inliners_search_cb {
+		void operator()(Dwarf_Die die, std::vector<std::string>& ns) {
+			Dwarf_Error error = DW_DLE_NE;
+			Dwarf_Half tag_value;
+			Dwarf_Attribute attr_mem;
+			Dwarf_Debug dwarf = fobj.dwarf_handle.get();
+
+			dwarf_tag(die, &tag_value, &error);
+
+			switch (tag_value) {
+				char* name;
+				case DW_TAG_subprogram:
+					if (!trace.source.function.empty())
+						break;
+					if (dwarf_diename(die, &name, &error) == DW_DLV_OK) {
+						trace.source.function = std::string(name);
+						dwarf_dealloc(dwarf, name, DW_DLA_STRING);
+					} else {
+						// We don't have a function name in this DIE.
+						// Check if there is a referenced non-defining
+						// declaration.
+						trace.source.function = get_referenced_die_name(
+								dwarf, die, DW_AT_abstract_origin, true);
+						if (trace.source.function.empty()) {
+							trace.source.function = get_referenced_die_name(
+									dwarf, die, DW_AT_specification, true);
+						}
+					}
+
+					// Append the function parameters, if available
+					set_function_parameters(
+							trace.source.function, ns, fobj, die);
+
+					// If the object function name is empty, it's possible that
+					// there is no dynamic symbol table (maybe the executable
+					// was stripped or not built with -rdynamic). See if we have
+					// a DWARF linkage name to use instead. We try both
+					// linkage_name and MIPS_linkage_name because the MIPS tag
+					// was the unofficial one until it was adopted in DWARF4.
+					// Old gcc versions generate MIPS_linkage_name
+					if (trace.object_function.empty()) {
+						details::demangler demangler;
+
+						if (dwarf_attr(die, DW_AT_linkage_name,
+								&attr_mem, &error) != DW_DLV_OK) {
+							if (dwarf_attr(die, DW_AT_MIPS_linkage_name,
+									&attr_mem, &error) != DW_DLV_OK) {
+								break;
+							}
+						}
+
+						char* linkage;
+						if (dwarf_formstring(attr_mem, &linkage, &error)
+								== DW_DLV_OK) {
+							trace.object_function = demangler.demangle(linkage);
+							dwarf_dealloc(dwarf, linkage, DW_DLA_STRING);
+						}
+						dwarf_dealloc(dwarf, name, DW_DLA_ATTR);
+					}
+					break;
+
+				case DW_TAG_inlined_subroutine:
+					ResolvedTrace::SourceLoc sloc;
+
+					if (dwarf_diename(die, &name, &error) == DW_DLV_OK) {
+						sloc.function = std::string(name);
+						dwarf_dealloc(dwarf, name, DW_DLA_STRING);
+					} else {
+						// We don't have a name for this inlined DIE, it could
+						// be that there is an abstract origin instead.
+						// Get the DW_AT_abstract_origin value, which is a
+						// reference to the source DIE and try to get its name
+						sloc.function = get_referenced_die_name(
+								dwarf, die, DW_AT_abstract_origin, true);
+					}
+
+					set_function_parameters(sloc.function, ns, fobj, die);
+
+					std::string file = die_call_file(dwarf, die, cu_die);
+					if (!file.empty())
+						sloc.filename = file;
+
+					Dwarf_Unsigned number = 0;
+					if (dwarf_attr(die, DW_AT_call_line, &attr_mem, &error)
+							== DW_DLV_OK) {
+						if (dwarf_formudata(attr_mem, &number, &error)
+								== DW_DLV_OK) {
+							sloc.line = number;
+						}
+						dwarf_dealloc(dwarf, attr_mem, DW_DLA_ATTR);
+					}
+
+					if (dwarf_attr(die, DW_AT_call_column, &attr_mem, &error)
+							== DW_DLV_OK) {
+						if (dwarf_formudata(attr_mem, &number, &error)
+								== DW_DLV_OK) {
+							sloc.col = number;
+						}
+						dwarf_dealloc(dwarf, attr_mem, DW_DLA_ATTR);
+					}
+
+					trace.inliners.push_back(sloc);
+					break;
+			};
+		}
+		ResolvedTrace& trace;
+		dwarf_fileobject& fobj;
+		Dwarf_Die cu_die;
+		inliners_search_cb(ResolvedTrace& t, dwarf_fileobject& f, Dwarf_Die c)
+			: trace(t), fobj(f), cu_die(c) {}
+	};
+
+	static Dwarf_Die find_fundie_by_pc(dwarf_fileobject& fobj,
+					Dwarf_Die parent_die, Dwarf_Addr pc, Dwarf_Die result) {
+		Dwarf_Die current_die = 0;
+		Dwarf_Error error = DW_DLE_NE;
+		Dwarf_Debug dwarf = fobj.dwarf_handle.get();
+
+		if (dwarf_child(parent_die, &current_die, &error) != DW_DLV_OK) {
+			return NULL;
+		}
+
+		for(;;) {
+			Dwarf_Die sibling_die = 0;
+			Dwarf_Half tag_value;
+			dwarf_tag(current_die, &tag_value, &error);
+
+			switch (tag_value) {
+				case DW_TAG_subprogram:
+				case DW_TAG_inlined_subroutine:
+					if (die_has_pc(fobj, current_die, pc)) {
+						return current_die;
+					}
+			};
+			bool declaration = false;
+			Dwarf_Attribute attr_mem;
+			if (dwarf_attr(current_die, DW_AT_declaration, &attr_mem, &error)
+					== DW_DLV_OK) {
+				Dwarf_Bool flag = 0;
+				if (dwarf_formflag(attr_mem, &flag, &error) == DW_DLV_OK) {
+					declaration = flag != 0;
+				}
+				dwarf_dealloc(dwarf, attr_mem, DW_DLA_ATTR);
+			}
+
+			if (!declaration) {
+				// let's be curious and look deeper in the tree, functions are
+				// not necessarily at the first level, but might be nested
+				// inside a namespace, structure, a function, an inlined
+				// function etc.
+				Dwarf_Die die_mem = 0;
+				Dwarf_Die indie = find_fundie_by_pc(
+						fobj, current_die, pc, die_mem);
+				if (indie) {
+					result = die_mem;
+					return result;
+				}
+			}
+
+			int res = dwarf_siblingof(
+					dwarf, current_die, &sibling_die, &error);
+			if (res == DW_DLV_ERROR) {
+				return NULL;
+			} else if (res == DW_DLV_NO_ENTRY) {
+				break;
+			}
+
+			if (current_die != parent_die) {
+				dwarf_dealloc(dwarf, current_die, DW_DLA_DIE);
+				current_die = 0;
+			}
+
+			current_die = sibling_die;
+		}
+		return NULL;
+	}
+
+	template <typename CB>
+		static bool deep_first_search_by_pc(dwarf_fileobject& fobj,
+						Dwarf_Die parent_die, Dwarf_Addr pc,
+						std::vector<std::string>& ns, CB cb) {
+		Dwarf_Die current_die = 0;
+		Dwarf_Debug dwarf = fobj.dwarf_handle.get();
+		Dwarf_Error error = DW_DLE_NE;
+
+		if (dwarf_child(parent_die, &current_die, &error) != DW_DLV_OK) {
+			return false;
+		}
+
+		bool branch_has_pc = false;
+		bool has_namespace = false;
+		for(;;) {
+			Dwarf_Die sibling_die = 0;
+
+			Dwarf_Half tag;
+			if (dwarf_tag(current_die, &tag, &error) == DW_DLV_OK) {
+				if (tag == DW_TAG_namespace || tag == DW_TAG_class_type) {
+					char* ns_name = NULL;
+					if (dwarf_diename(current_die, &ns_name, &error)
+							== DW_DLV_OK) {
+						if (ns_name) {
+							ns.push_back(std::string(ns_name));
+						} else {
+							ns.push_back("<unknown>");
+						}
+						dwarf_dealloc(dwarf, ns_name,  DW_DLA_STRING);
+					} else {
+						ns.push_back("<unknown>");
+					}
+					has_namespace = true;
+				}
+			}
+
+			bool declaration = false;
+			Dwarf_Attribute attr_mem;
+			if (tag != DW_TAG_class_type &&
+				dwarf_attr(current_die, DW_AT_declaration, &attr_mem, &error)
+					== DW_DLV_OK) {
+				Dwarf_Bool flag = 0;
+				if (dwarf_formflag(attr_mem, &flag, &error) == DW_DLV_OK) {
+					declaration = flag != 0;
+				}
+				dwarf_dealloc(dwarf, attr_mem, DW_DLA_ATTR);
+			}
+
+			if (!declaration) {
+				// let's be curious and look deeper in the tree, function are
+				// not necessarily at the first level, but might be nested
+				// inside a namespace, structure, a function, an inlined
+				// function etc.
+				branch_has_pc = deep_first_search_by_pc(
+												fobj, current_die, pc, ns, cb);
+			}
+
+			if (!branch_has_pc) {
+				branch_has_pc = die_has_pc(fobj, current_die, pc);
+			}
+
+			if (branch_has_pc) {
+				cb(current_die, ns);
+			}
+
+			int result = dwarf_siblingof(
+					dwarf, current_die, &sibling_die, &error);
+			if (result == DW_DLV_ERROR) {
+				return false;
+			} else if (result == DW_DLV_NO_ENTRY) {
+				break;
+			}
+
+			if (current_die != parent_die) {
+				dwarf_dealloc(dwarf, current_die, DW_DLA_DIE);
+				current_die = 0;
+			}
+
+			if (has_namespace) {
+				has_namespace = false;
+				ns.pop_back();
+			}
+			current_die = sibling_die;
+		}
+
+		if (has_namespace) {
+			ns.pop_back();
+		}
+		return branch_has_pc;
+	}
+
+	static std::string die_call_file(
+			Dwarf_Debug dwarf, Dwarf_Die die, Dwarf_Die cu_die) {
+		Dwarf_Attribute attr_mem;
+		Dwarf_Error error = DW_DLE_NE;
+		Dwarf_Signed file_index;
+
+		std::string file;
+
+		if (dwarf_attr(die, DW_AT_call_file, &attr_mem, &error) == DW_DLV_OK) {
+			if (dwarf_formsdata(attr_mem, &file_index, &error) != DW_DLV_OK) {
+				file_index = 0;
+			}
+			dwarf_dealloc(dwarf, attr_mem, DW_DLA_ATTR);
+
+			if (file_index == 0) {
+				return file;
+			}
+
+			char **srcfiles = 0;
+			Dwarf_Signed file_count = 0;
+			if (dwarf_srcfiles(cu_die, &srcfiles, &file_count, &error)
+					== DW_DLV_OK) {
+				if (file_index <= file_count)
+					file = std::string(srcfiles[file_index - 1]);
+
+				// Deallocate all strings!
+				for (int i = 0; i < file_count; ++i) {
+					dwarf_dealloc(dwarf, srcfiles[i], DW_DLA_STRING);
+				}
+				dwarf_dealloc(dwarf, srcfiles, DW_DLA_LIST);
+			}
+		}
+		return file;
+	}
+
+
+	Dwarf_Die find_die(dwarf_fileobject& fobj, Dwarf_Addr addr)
+	{
+		// Let's get to work! First see if we have a debug_aranges section so
+		// we can speed up the search
+
+		Dwarf_Debug dwarf = fobj.dwarf_handle.get();
+		Dwarf_Error error = DW_DLE_NE;
+		Dwarf_Arange *aranges;
+		Dwarf_Signed arange_count;
+
+		Dwarf_Die returnDie;
+		bool found = false;
+		if (dwarf_get_aranges(
+				dwarf, &aranges, &arange_count, &error) != DW_DLV_OK) {
+			aranges = NULL;
+		}
+
+		if (aranges) {
+			// We have aranges. Get the one where our address is.
+			Dwarf_Arange arange;
+			if (dwarf_get_arange(
+					aranges, arange_count, addr, &arange, &error)
+						== DW_DLV_OK) {
+
+				// We found our address. Get the compilation-unit DIE offset
+				// represented by the given address range.
+				Dwarf_Off cu_die_offset;
+				if (dwarf_get_cu_die_offset(arange, &cu_die_offset, &error)
+						== DW_DLV_OK) {
+					// Get the DIE at the offset returned by the aranges search.
+					// We set is_info to 1 to specify that the offset is from
+					// the .debug_info section (and not .debug_types)
+					int dwarf_result = dwarf_offdie_b(
+							dwarf, cu_die_offset, 1, &returnDie, &error);
+
+					found = dwarf_result == DW_DLV_OK;
+				}
+				dwarf_dealloc(dwarf, arange, DW_DLA_ARANGE);
+			}
+		}
+
+		if (found)
+			return returnDie; // The caller is responsible for freeing the die
+
+		// The search for aranges failed. Try to find our address by scanning
+		// all compilation units.
+		Dwarf_Unsigned next_cu_header;
+		while (dwarf_next_cu_header_d(dwarf, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+				&next_cu_header, 0, &error) == DW_DLV_OK) {
+			if (dwarf_siblingof(dwarf, 0, &returnDie, &error) == DW_DLV_OK) {
+				if (die_has_pc(fobj, returnDie, addr)) {
+					found = true;
+					break;
+				}
+				dwarf_dealloc(dwarf, returnDie, DW_DLA_DIE);
+			}
+		}
+
+		while (dwarf_next_cu_header_d(dwarf, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+				&next_cu_header, 0, &error) == DW_DLV_OK) {
+			// Reset the cu header state. Unfortunately, libdwarf's
+			// next_cu_header API keeps its own iterator per Dwarf_Debug that
+			// can't be reset. We need to keep fetching elements until the end.
+		}
+
+		if (found)
+			return returnDie;
+
+
+		// We couldn't find any compilation units with ranges or a high/low pc.
+		// Try again by looking at all DIEs in all compilation units.
+		Dwarf_Die cudie;
+		while (dwarf_next_cu_header_d(dwarf, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+				&next_cu_header, 0, &error) == DW_DLV_OK) {
+			if (dwarf_siblingof(dwarf, 0, &cudie, &error) == DW_DLV_OK) {
+				Dwarf_Die die_mem = 0;
+				Dwarf_Die resultDie = find_fundie_by_pc(
+						fobj, cudie, addr, die_mem);
+
+				if (resultDie) {
+					found = true;
+					break;
+				}
+			}
+		}
+
+		while (dwarf_next_cu_header_d(dwarf, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+				&next_cu_header, 0, &error) == DW_DLV_OK) {
+			// Reset the cu header state. Unfortunately, libdwarf's
+			// next_cu_header API keeps its own iterator per Dwarf_Debug that
+			// can't be reset. We need to keep fetching elements until the end.
+		}
+
+		if (found)
+			return cudie;
+
+		// We failed.
+		return NULL;
+	}
+};
+#endif // BACKWARD_HAS_DWARF == 1
 
 template<>
 class TraceResolverImpl<system_tag::linux_tag>:
