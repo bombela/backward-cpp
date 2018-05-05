@@ -56,7 +56,7 @@
 #elif defined(BACKWARD_SYSTEM_DARWIN)
 #elif defined(BACKWARD_SYSTEM_UNKNOWN)
 #else
-#	if defined(__linux)
+#	if defined(__linux) || defined(__linux__)
 #		define BACKWARD_SYSTEM_LINUX
 #	elif defined(__APPLE__)
 #		define BACKWARD_SYSTEM_DARWIN
