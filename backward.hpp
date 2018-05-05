@@ -3730,6 +3730,8 @@ public:
 
 #if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
 		psiginfo(info, 0);
+#else
+		(void)info;
 #endif
 	}
 
