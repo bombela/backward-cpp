@@ -3689,7 +3689,10 @@ public:
 					SA_RESETHAND);
 			sigfillset(&action.sa_mask);
 			sigdelset(&action.sa_mask, posix_signals[i]);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
 			action.sa_sigaction = &sig_handler;
+#pragma clang diagnostic pop
 
 			int r = sigaction(posix_signals[i], &action, nullptr);
 			if (r < 0) success = false;
