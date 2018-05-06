@@ -133,7 +133,7 @@ else()
 	endif()
 
 	if (STACK_DETAILS_DWARF)
-		LIST(APPEND BACKWARD_LIBRARIES dwarf elf)
+		LIST(APPEND _BACKWARD_LIBRARIES dwarf elf)
 	endif()
 endif()
 
