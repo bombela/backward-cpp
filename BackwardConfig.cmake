@@ -180,6 +180,16 @@ set(BACKWARD_DEFINITIONS ${_BACKWARD_DEFINITIONS} CACHE INTERNAL "BACKWARD_DEFIN
 set(BACKWARD_LIBRARIES ${_BACKWARD_LIBRARIES} CACHE INTERNAL "BACKWARD_LIBRARIES")
 mark_as_advanced(BACKWARD_INCLUDE_DIRS BACKWARD_DEFINITIONS BACKWARD_LIBRARIES)
 
+# Expand each definition in BACKWARD_DEFINITIONS to its own cmake var and export
+# to outer scope
+foreach(var ${BACKWARD_DEFINITIONS})
+  string(REPLACE "=" ";" var_as_list ${var})
+  list(GET var_as_list 0 var_name)
+  list(GET var_as_list 1 var_value)
+  set(${var_name} ${var_value})
+  mark_as_advanced(${var_name})
+endforeach()
+
 if (NOT TARGET Backward::Backward)
 	add_library(Backward::Backward INTERFACE IMPORTED)
 	set_target_properties(Backward::Backward PROPERTIES
