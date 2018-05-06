@@ -72,7 +72,7 @@ if (${STACK_DETAILS_AUTO_DETECT})
 		LIBDL_INCLUDE_DIR LIBDL_LIBRARY)
 
 	# find libdwarf
-	find_path(LIBDWARF_INCLUDE_DIR NAMES "libdwarf.h")
+	find_path(LIBDWARF_INCLUDE_DIR NAMES "libdwarf.h" PATH_SUFFIXES libdwarf)
 	find_path(LIBELF_INCLUDE_DIR NAMES "libelf.h")
 	find_path(LIBDL_INCLUDE_DIR NAMES "dlfcn.h")
 	find_library(LIBDWARF_LIBRARY dwarf)
