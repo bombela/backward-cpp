@@ -1899,7 +1899,7 @@ private:
 	}
 
 	dwarf_fileobject& load_object_with_dwarf(
-			const std::string filename_object) {
+			const std::string& filename_object) {
 
 		if (!_dwarf_loaded) {
 			// Set the ELF library operating version
