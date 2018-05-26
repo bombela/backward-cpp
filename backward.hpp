@@ -2328,7 +2328,8 @@ private:
 						&ranges_count, &byte_count, &error) == DW_DLV_OK) {
 					has_ranges = ranges_count != 0;
 					for (int i = 0; i < ranges_count; i++) {
-						if (pc >= ranges[i].dwr_addr1 + low_pc &&
+						if (ranges[i].dwr_addr1 != 0 &&
+							pc >= ranges[i].dwr_addr1 + low_pc &&
 							pc < ranges[i].dwr_addr2 + low_pc) {
 							result = true;
 							break;
