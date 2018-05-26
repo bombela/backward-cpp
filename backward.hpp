@@ -2429,8 +2429,9 @@ private:
 			while (dwarf_next_cu_header_d(dwarf, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 					&next_cu_header, 0, &error) == DW_DLV_OK) {
 				// Reset the cu header state. Unfortunately, libdwarf's
-				// next_cu_header API keeps its own iterator per Dwarf_Debug that
-				// can't be reset. We need to keep fetching elements until the end.
+				// next_cu_header API keeps its own iterator per Dwarf_Debug
+				// that can't be reset. We need to keep fetching elements until
+				// the end.
 			}
 		} else {
 			// If we couldn't resolve the type just print out the signature
@@ -2438,7 +2439,8 @@ private:
 			string_stream << "<0x" <<
 					std::hex << std::setfill('0');
 			for (int i = 0; i < 8; ++i) {
-				string_stream << std::setw(2) << std::hex << (int)(unsigned char)(signature.signature[i]);
+				string_stream << std::setw(2) << std::hex
+						<< (int)(unsigned char)(signature.signature[i]);
 			}
 			string_stream << ">";
 			result = string_stream.str();
@@ -2562,7 +2564,8 @@ private:
 
 		context.is_const = next_type_is_const;
 
-		Dwarf_Die ref = get_referenced_die(fobj.dwarf_handle.get(), die, DW_AT_type, true);
+		Dwarf_Die ref = get_referenced_die(
+				fobj.dwarf_handle.get(), die, DW_AT_type, true);
 		if (ref) {
 			set_parameter_string(fobj, ref, context);
 			dwarf_dealloc(fobj.dwarf_handle.get(), ref, DW_DLA_DIE);
