@@ -149,7 +149,29 @@ Of course you can simply add the define (`-DBACKWARD_HAS_...=1`) and the
 linkage details in your build system and even auto-detect which library is
 installed, it's up to you.
 
-That'ss it, you are all set, you should be getting nice stack traces like the
+#### [libdwarf](https://sourceforge.net/projects/libdwarf/) and [libelf](http://www.mr511.de/software/english.html)
+
+	apt-get install libdwarf-dev (or equivalent)
+
+And do not forget to link with the lib and inform Backward to use it:
+
+	#define BACKWARD_HAS_DWARF 1
+
+There are several alternative implementations of libdwarf and libelf that
+are API compatible so it's possible, although it hasn't been tested, to
+replace the ones used when developing backward (in bold, below):
+
+* **_libelf_** by [Michael "Tired" Riepe](http://www.mr511.de/software/english.html)
+* **_libdwarf_** by [David Anderson](https://www.prevanders.net/dwarf.html)
+* libelf from [elfutils](https://fedorahosted.org/elfutils/)
+* libelf and libdwarf from FreeBSD's [ELF Tool Chain](https://sourceforge.net/p/elftoolchain/wiki/Home/) project
+
+
+Of course you can simply add the define (`-DBACKWARD_HAS_...=1`) and the
+linkage details in your build system and even auto-detect which library is
+installed, it's up to you.
+
+That's it, you are all set, you should be getting nice stack traces like the
 one at the beginning of this document.
 
 ## API
