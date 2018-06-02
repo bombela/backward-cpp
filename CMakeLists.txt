@@ -32,6 +32,12 @@ if (COMPILER_NAME MATCHES "^nvcc")
   set(COMPILER_IS_NVCC true)
 endif()
 
+if (DEFINED ENV{OMPI_CXX} OR DEFINED ENV{MPICH_CXX})
+   if ( ($ENV{OMPI_CXX} MATCHES "nvcc") OR ($ENV{MPICH_CXX} MATCHES "nvcc") )
+     set(COMPILER_IS_NVCC true)
+   endif()
+endif()
+
 # set CXX standard
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_STANDARD 11)
