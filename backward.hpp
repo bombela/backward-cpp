@@ -1903,7 +1903,7 @@ private:
 	}
 
 	dwarf_fileobject& load_object_with_dwarf(
-			const std::string filename_object) {
+			const std::string& filename_object) {
 
 		if (!_dwarf_loaded) {
 			// Set the ELF library operating version
@@ -2332,7 +2332,8 @@ private:
 						&ranges_count, &byte_count, &error) == DW_DLV_OK) {
 					has_ranges = ranges_count != 0;
 					for (int i = 0; i < ranges_count; i++) {
-						if (pc >= ranges[i].dwr_addr1 + low_pc &&
+						if (ranges[i].dwr_addr1 != 0 &&
+							pc >= ranges[i].dwr_addr1 + low_pc &&
 							pc < ranges[i].dwr_addr2 + low_pc) {
 							result = true;
 							break;
@@ -2432,8 +2433,9 @@ private:
 			while (dwarf_next_cu_header_d(dwarf, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 					&next_cu_header, 0, &error) == DW_DLV_OK) {
 				// Reset the cu header state. Unfortunately, libdwarf's
-				// next_cu_header API keeps its own iterator per Dwarf_Debug that
-				// can't be reset. We need to keep fetching elements until the end.
+				// next_cu_header API keeps its own iterator per Dwarf_Debug
+				// that can't be reset. We need to keep fetching elements until
+				// the end.
 			}
 		} else {
 			// If we couldn't resolve the type just print out the signature
@@ -2441,7 +2443,8 @@ private:
 			string_stream << "<0x" <<
 					std::hex << std::setfill('0');
 			for (int i = 0; i < 8; ++i) {
-				string_stream << std::setw(2) << std::hex << (int)(unsigned char)(signature.signature[i]);
+				string_stream << std::setw(2) << std::hex
+						<< (int)(unsigned char)(signature.signature[i]);
 			}
 			string_stream << ">";
 			result = string_stream.str();
@@ -2565,7 +2568,8 @@ private:
 
 		context.is_const = next_type_is_const;
 
-		Dwarf_Die ref = get_referenced_die(fobj.dwarf_handle.get(), die, DW_AT_type, true);
+		Dwarf_Die ref = get_referenced_die(
+				fobj.dwarf_handle.get(), die, DW_AT_type, true);
 		if (ref) {
 			set_parameter_string(fobj, ref, context);
 			dwarf_dealloc(fobj.dwarf_handle.get(), ref, DW_DLA_DIE);
@@ -3032,27 +3036,36 @@ private:
 		// The search for aranges failed. Try to find our address by scanning
 		// all compilation units.
 		Dwarf_Unsigned next_cu_header;
-		while (dwarf_next_cu_header_d(dwarf, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+		Dwarf_Half tag = 0;
+		returnDie = 0;
+
+		while (!found && dwarf_next_cu_header_d(dwarf, 1, 0, 0, 0, 0, 0, 0, 0, 0,
 				&next_cu_header, 0, &error) == DW_DLV_OK) {
-			if (dwarf_siblingof(dwarf, 0, &returnDie, &error) == DW_DLV_OK) {
-				if (die_has_pc(fobj, returnDie, addr)) {
-					found = true;
-					break;
-				}
+
+			if (returnDie)
 				dwarf_dealloc(dwarf, returnDie, DW_DLA_DIE);
+
+			if (dwarf_siblingof(dwarf, 0, &returnDie, &error) == DW_DLV_OK) {
+				if ((dwarf_tag(returnDie, &tag, &error) == DW_DLV_OK)
+					&& tag == DW_TAG_compile_unit) {
+					if (die_has_pc(fobj, returnDie, addr)) {
+						found = true;
+					}
+                }
 			}
 		}
 
-		while (dwarf_next_cu_header_d(dwarf, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-				&next_cu_header, 0, &error) == DW_DLV_OK) {
-			// Reset the cu header state. Unfortunately, libdwarf's
-			// next_cu_header API keeps its own iterator per Dwarf_Debug that
-			// can't be reset. We need to keep fetching elements until the end.
+		if (found) {
+			while (dwarf_next_cu_header_d(dwarf, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+					&next_cu_header, 0, &error) == DW_DLV_OK) {
+				// Reset the cu header state. Libdwarf's next_cu_header API
+				// keeps its own iterator per Dwarf_Debug that can't be reset.
+				// We need to keep fetching elements until the end.
+			}
 		}
 
 		if (found)
 			return returnDie;
-
 
 		// We couldn't find any compilation units with ranges or a high/low pc.
 		// Try again by looking at all DIEs in all compilation units.
@@ -3071,11 +3084,13 @@ private:
 			}
 		}
 
-		while (dwarf_next_cu_header_d(dwarf, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-				&next_cu_header, 0, &error) == DW_DLV_OK) {
-			// Reset the cu header state. Unfortunately, libdwarf's
-			// next_cu_header API keeps its own iterator per Dwarf_Debug that
-			// can't be reset. We need to keep fetching elements until the end.
+		if (found) {
+			while (dwarf_next_cu_header_d(dwarf, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+					&next_cu_header, 0, &error) == DW_DLV_OK) {
+				// Reset the cu header state. Libdwarf's next_cu_header API
+				// keeps its own iterator per Dwarf_Debug that can't be reset.
+				// We need to keep fetching elements until the end.
+			}
 		}
 
 		if (found)
