@@ -335,6 +335,7 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context*, int*);
 	} // namespace details
 	} // namespace backward
 #else // NOT BACKWARD_ATLEAST_CXX11
+#	define nullptr NULL
 #	define override
 #	include <map>
 	namespace backward {
@@ -472,7 +473,7 @@ public:
 	}
 	operator const dummy*() const {
 		if (_empty) {
-			return 0;
+			return nullptr;
 		}
 		return reinterpret_cast<const dummy*>(_val);
 	}
@@ -523,7 +524,7 @@ struct demangler_impl<system_tag::current_tag> {
 	std::string demangle(const char* funcname) {
 		using namespace details;
 		char* result = abi::__cxa_demangle(funcname,
-			_demangle_buffer.release(), &_demangle_buffer_length, 0);
+			_demangle_buffer.release(), &_demangle_buffer_length, nullptr);
 		if(result) {
 			_demangle_buffer.reset(result);
 			return result;
@@ -550,7 +551,7 @@ struct Trace {
 	size_t   idx;
 
 	Trace():
-		addr(0), idx(0) {}
+		addr(nullptr), idx(0) {}
 
 	explicit Trace(void* _addr, size_t _idx):
 		addr(_addr), idx(_idx) {}
@@ -671,7 +672,7 @@ public:
 		if (size()) {
 			return &_stacktrace[skip_n_firsts()];
 		}
-		return 0;
+		return nullptr;
 	}
 
 protected:
@@ -691,7 +692,7 @@ public:
 		_index = -1;
 		_depth = depth;
 		_Unwind_Backtrace(&this->backtrace_trampoline, this);
-		return _index;
+		return static_cast<size_t>(_index);
 	}
 
 private:
@@ -718,10 +719,10 @@ private:
 			} else {
 				ip -= 1; // else just normally decrement it (no overflow/underflow will happen)
 			}
-		}
+    }
 
 		if (_index >= 0) { // ignore first frame.
-			(*_f)(_index, reinterpret_cast<void*>(ip));
+			(*_f)(static_cast<size_t>(_index), reinterpret_cast<void*>(ip));
 		}
 		_index += 1;
 		return _URC_NO_REASON;
@@ -915,7 +916,7 @@ class TraceResolverLinuxImpl<trace_resolver_tag::libbfd>:
 				path.resize(path.size() * 2);
 			}
 			else {
-				path.resize(len);
+				path.resize(static_cast<std::string::size_type>(len));
 				break;
 			}
 		}
@@ -1163,7 +1164,7 @@ private:
 
 		if (symtab_storage_size > 0) {
 			symtab.reset(
-					static_cast<bfd_symbol**>(malloc(symtab_storage_size))
+					static_cast<bfd_symbol**>(malloc(static_cast<size_t>(symtab_storage_size)))
 					);
 			symcount = bfd_canonicalize_symtab(
 					bfd_handle.get(), symtab.get()
@@ -1172,7 +1173,7 @@ private:
 
 		if (dyn_symtab_storage_size > 0) {
 			dynamic_symtab.reset(
-					static_cast<bfd_symbol**>(malloc(dyn_symtab_storage_size))
+					static_cast<bfd_symbol**>(malloc(static_cast<size_t>(dyn_symtab_storage_size)))
 					);
 			dyn_symcount = bfd_canonicalize_dynamic_symtab(
 					bfd_handle.get(), dynamic_symtab.get()
@@ -1249,6 +1250,8 @@ private:
 			}
 		}
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
 		if (!result.found && fobj.symtab) {
 			result.found = bfd_find_nearest_line(fobj.handle.get(), section,
 					fobj.symtab.get(), addr - sec_addr, &result.filename,
@@ -1260,6 +1263,7 @@ private:
 					fobj.dynamic_symtab.get(), addr - sec_addr,
 					&result.filename, &result.funcname, &result.line);
 		}
+#pragma clang diagnostic pop
 
 	}
 
@@ -3259,7 +3263,7 @@ public:
 	}
 
 #ifdef BACKWARD_ATLEAST_CXX11
-	SourceFile(SourceFile&& from): _file(0) {
+	SourceFile(SourceFile&& from): _file(nullptr) {
 		swap(from);
 	}
 	SourceFile& operator=(SourceFile&& from) {
@@ -3370,7 +3374,7 @@ public:
 	}
 
 	std::streamsize xsputn(const char_type* s, std::streamsize count) override {
-		return fwrite(s, sizeof *s, count, sink);
+		return static_cast<std::streamsize>(fwrite(s, sizeof *s, static_cast<size_t>(count), sink));
 	}
 
 #ifdef BACKWARD_ATLEAST_CXX11
@@ -3594,7 +3598,7 @@ private:
 		typedef SnippetFactory::lines_t lines_t;
 
 		lines_t lines = _snippets.get_snippet(source_loc.filename,
-				source_loc.line, context_size);
+				source_loc.line, static_cast<unsigned>(context_size));
 
 		for (lines_t::const_iterator it = lines.begin();
 				it != lines.end(); ++it) {
@@ -3616,7 +3620,7 @@ private:
 
 	void print_source_loc(std::ostream& os, const char* indent,
 			const ResolvedTrace::SourceLoc& source_loc,
-			void* addr=0) {
+			void* addr=nullptr) {
 		os << indent
 		   << "Source \""
 		   << source_loc.filename
@@ -3625,7 +3629,7 @@ private:
 		   << ", in "
 		   << source_loc.function;
 
-		if (address && addr != 0) {
+		if (address && addr != nullptr) {
 			os << " [" << addr << "]";
 		}
 		os << "\n";
@@ -3671,7 +3675,7 @@ public:
 			ss.ss_sp = _stack_content.get();
 			ss.ss_size = stack_size;
 			ss.ss_flags = 0;
-			if (sigaltstack(&ss, 0) < 0) {
+			if (sigaltstack(&ss, nullptr) < 0) {
 				success = false;
 			}
 		} else {
@@ -3681,13 +3685,16 @@ public:
 		for (size_t i = 0; i < posix_signals.size(); ++i) {
 			struct sigaction action;
 			memset(&action, 0, sizeof action);
-			action.sa_flags = (SA_SIGINFO | SA_ONSTACK | SA_NODEFER |
+			action.sa_flags = static_cast<int>(SA_SIGINFO | SA_ONSTACK | SA_NODEFER |
 					SA_RESETHAND);
 			sigfillset(&action.sa_mask);
 			sigdelset(&action.sa_mask, posix_signals[i]);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
 			action.sa_sigaction = &sig_handler;
+#pragma clang diagnostic pop
 
-			int r = sigaction(posix_signals[i], &action, 0);
+			int r = sigaction(posix_signals[i], &action, nullptr);
 			if (r < 0) success = false;
 		}
 
@@ -3700,7 +3707,7 @@ public:
 		ucontext_t *uctx = static_cast<ucontext_t*>(_ctx);
 
 		StackTrace st;
-		void* error_addr = 0;
+		void* error_addr = nullptr;
 #ifdef REG_RIP // x86_64
 		error_addr = reinterpret_cast<void*>(uctx->uc_mcontext.gregs[REG_RIP]);
 #elif defined(REG_EIP) // x86_32
@@ -3731,7 +3738,7 @@ public:
 		printer.print(st, stderr);
 
 #if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
-		psiginfo(info, 0);
+		psiginfo(info, nullptr);
 #else
 		(void)info;
 #endif
