@@ -72,7 +72,7 @@ if (${STACK_DETAILS_AUTO_DETECT})
 		LIBDL_INCLUDE_DIR LIBDL_LIBRARY)
 
 	# find libdwarf
-	find_path(LIBDWARF_INCLUDE_DIR NAMES "libdwarf.h")
+	find_path(LIBDWARF_INCLUDE_DIR NAMES "libdwarf.h" PATH_SUFFIXES libdwarf)
 	find_path(LIBELF_INCLUDE_DIR NAMES "libelf.h")
 	find_path(LIBDL_INCLUDE_DIR NAMES "dlfcn.h")
 	find_library(LIBDWARF_LIBRARY dwarf)
@@ -133,7 +133,7 @@ else()
 	endif()
 
 	if (STACK_DETAILS_DWARF)
-		LIST(APPEND BACKWARD_LIBRARIES dwarf elf)
+		LIST(APPEND _BACKWARD_LIBRARIES dwarf elf)
 	endif()
 endif()
 
@@ -169,16 +169,24 @@ list(APPEND _BACKWARD_INCLUDE_DIRS ${BACKWARD_INCLUDE_DIR})
 
 macro(add_backward target)
 	target_include_directories(${target} PRIVATE ${BACKWARD_INCLUDE_DIRS})
-	set_property(TARGET ${target} APPEND PROPERTY COMPILE_DEFINITIONS ${_BACKWARD_DEFINITIONS})
-	if(BACKWARD_HAS_EXTERNAL_LIBRARIES)
-		set_property(TARGET ${target} APPEND PROPERTY LINK_LIBRARIES ${_BACKWARD_LIBRARIES})
-	endif()
+	set_property(TARGET ${target} APPEND PROPERTY COMPILE_DEFINITIONS ${BACKWARD_DEFINITIONS})
+	set_property(TARGET ${target} APPEND PROPERTY LINK_LIBRARIES ${BACKWARD_LIBRARIES})
 endmacro()
 
 set(BACKWARD_INCLUDE_DIRS ${_BACKWARD_INCLUDE_DIRS} CACHE INTERNAL "_BACKWARD_INCLUDE_DIRS")
 set(BACKWARD_DEFINITIONS ${_BACKWARD_DEFINITIONS} CACHE INTERNAL "BACKWARD_DEFINITIONS")
 set(BACKWARD_LIBRARIES ${_BACKWARD_LIBRARIES} CACHE INTERNAL "BACKWARD_LIBRARIES")
 mark_as_advanced(BACKWARD_INCLUDE_DIRS BACKWARD_DEFINITIONS BACKWARD_LIBRARIES)
+
+# Expand each definition in BACKWARD_DEFINITIONS to its own cmake var and export
+# to outer scope
+foreach(var ${BACKWARD_DEFINITIONS})
+  string(REPLACE "=" ";" var_as_list ${var})
+  list(GET var_as_list 0 var_name)
+  list(GET var_as_list 1 var_value)
+  set(${var_name} ${var_value})
+  mark_as_advanced(${var_name})
+endforeach()
 
 if (NOT TARGET Backward::Backward)
 	add_library(Backward::Backward INTERFACE IMPORTED)

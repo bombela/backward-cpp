@@ -719,7 +719,7 @@ private:
 			} else {
 				ip -= 1; // else just normally decrement it (no overflow/underflow will happen)
 			}
-		}
+    }
 
 		if (_index >= 0) { // ignore first frame.
 			(*_f)(static_cast<size_t>(_index), reinterpret_cast<void*>(ip));
