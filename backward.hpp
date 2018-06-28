@@ -631,11 +631,11 @@ protected:
 	void load_thread_info() {
 #ifdef BACKWARD_SYSTEM_LINUX
 #ifndef __ANDROID__
-		_thread_id = (size_t)syscall(SYS_gettid);
+		_thread_id = static_cast<size_t>(syscall(SYS_gettid));
 #else
-		_thread_id = (size_t)gettid();
+		_thread_id = static_cast<size_t>(gettid());
 #endif
-		if (_thread_id == (size_t) getpid()) {
+		if (_thread_id == static_cast<size_t>(getpid())) {
 			// If the thread is the main one, let's hide that.
 			// I like to keep little secret sometimes.
 			_thread_id = 0;
@@ -701,7 +701,7 @@ private:
 
 	static _Unwind_Reason_Code backtrace_trampoline(
 			_Unwind_Context* ctx, void *self) {
-		return ((Unwinder*)self)->backtrace(ctx);
+		return (static_cast<Unwinder*>(self))->backtrace(ctx);
 	}
 
 	_Unwind_Reason_Code backtrace(_Unwind_Context* ctx) {
@@ -721,7 +721,7 @@ private:
 		}
 
 		if (_index >= 0) { // ignore first frame.
-			(*_f)(_index, (void*)ip);
+			(*_f)(_index, reinterpret_cast<void*>(ip));
 		}
 		_index += 1;
 		return _URC_NO_REASON;
@@ -911,7 +911,7 @@ class TraceResolverLinuxImpl<trace_resolver_tag::libbfd>:
 			if(len < 0) {
 				return "";
 			}
-			if ((size_t)len == path.size()) {
+			if (static_cast<size_t>(len) == path.size()) {
 				path.resize(path.size() * 2);
 			}
 			else {
@@ -1163,7 +1163,7 @@ private:
 
 		if (symtab_storage_size > 0) {
 			symtab.reset(
-					(bfd_symbol**) malloc(symtab_storage_size)
+					static_cast<bfd_symbol**>(malloc(symtab_storage_size))
 					);
 			symcount = bfd_canonicalize_symtab(
 					bfd_handle.get(), symtab.get()
@@ -1172,7 +1172,7 @@ private:
 
 		if (dyn_symtab_storage_size > 0) {
 			dynamic_symtab.reset(
-					(bfd_symbol**) malloc(dyn_symtab_storage_size)
+					static_cast<bfd_symbol**>(malloc(dyn_symtab_storage_size))
 					);
 			dyn_symcount = bfd_canonicalize_dynamic_symtab(
 					bfd_handle.get(), dynamic_symtab.get()
@@ -1214,7 +1214,7 @@ private:
 		context.base_addr = base_addr;
 		context.result.found = false;
 		bfd_map_over_sections(fobj.handle.get(), &find_in_section_trampoline,
-				(void*)&context);
+				static_cast<void*>(&context));
 		return context.result;
 	}
 
@@ -3665,7 +3665,7 @@ public:
 		bool success = true;
 
 		const size_t stack_size = 1024 * 1024 * 8;
-		_stack_content.reset((char*)malloc(stack_size));
+		_stack_content.reset(static_cast<char*>(malloc(stack_size)));
 		if (_stack_content) {
 			stack_t ss;
 			ss.ss_sp = _stack_content.get();
@@ -3697,7 +3697,7 @@ public:
 	bool loaded() const { return _loaded; }
 
 	static void handleSignal(int, siginfo_t* info, void* _ctx) {
-		ucontext_t *uctx = (ucontext_t*) _ctx;
+		ucontext_t *uctx = static_cast<ucontext_t*>(_ctx);
 
 		StackTrace st;
 		void* error_addr = 0;
