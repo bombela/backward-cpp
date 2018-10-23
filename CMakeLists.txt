@@ -23,6 +23,12 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(backward CXX)
 
+# Introduce variables:
+# * CMAKE_INSTALL_LIBDIR
+# * CMAKE_INSTALL_BINDIR
+# * CMAKE_INSTALL_INCLUDEDIR
+include(GNUInstallDirs)
+
 include(BackwardConfig.cmake)
 
 # check if compiler is nvcc or nvcc_wrapper
@@ -125,9 +131,9 @@ endif()
 
 install(
     FILES "backward.hpp"
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/include
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 install(
     FILES "BackwardConfig.cmake"
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/backward
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/backward
 )
