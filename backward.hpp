@@ -1250,8 +1250,10 @@ private:
 			}
 		}
 
+#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
+#endif
 		if (!result.found && fobj.symtab) {
 			result.found = bfd_find_nearest_line(fobj.handle.get(), section,
 					fobj.symtab.get(), addr - sec_addr, &result.filename,
@@ -1263,7 +1265,9 @@ private:
 					fobj.dynamic_symtab.get(), addr - sec_addr,
 					&result.filename, &result.funcname, &result.line);
 		}
+#if defined(__clang__)
 #pragma clang diagnostic pop
+#endif
 
 	}
 
