@@ -1325,7 +1325,7 @@ public:
 	ResolvedTrace resolve(ResolvedTrace trace) {
 		using namespace details;
 
-		Dwarf_Addr trace_addr = reinterpret_cast<uintptr_t>(trace.addr);
+		Dwarf_Addr trace_addr = reinterpret_cast<Dwarf_Addr>(trace.addr);
 
 		if (!_dwfl_handle_initialized) {
 			// initialize dwfl...
