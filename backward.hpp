@@ -3415,8 +3415,11 @@ private:
 
 namespace Color {
 	enum type {
+                red = 31,
+                green = 32,
 		yellow = 33,
 		purple = 35,
+                cyan = 36,
 		reset  = 39
 	};
 } // namespace Color
@@ -3463,8 +3466,11 @@ private:
 
 namespace Color {
 	enum type {
+                red = 0,
+                green = 0,
 		yellow = 0,
 		purple = 0,
+                cyan = 0,
 		reset  = 0
 	};
 } // namespace Color
@@ -3571,13 +3577,15 @@ private:
 		bool already_indented = true;
 
 		if (!trace.source.filename.size() || object) {
-			os << "   Object \""
-			   << trace.object_filename
-			   << "\", at "
+                        os << "   Object \"";
+                        print_filename(os, trace.object_filename, colorize);
+                        os << "\", at "
 			   << trace.addr
-			   << ", in "
-			   << trace.object_function
-			   << "\n";
+                           << ", in ";
+                        colorize.set_color(Color::red);
+                        os << trace.object_function;
+                        colorize.set_color(Color::reset);
+                        os << "\n";
 			already_indented = false;
 		}
 
@@ -3588,7 +3596,7 @@ private:
 			}
 			const ResolvedTrace::SourceLoc& inliner_loc
 				= trace.inliners[inliner_idx-1];
-			print_source_loc(os, " | ", inliner_loc);
+                        print_source_loc(os, " | ", inliner_loc, colorize);
 			if (snippet) {
 				print_snippet(os, "    | ", inliner_loc,
 						colorize, Color::purple, inliner_context_size);
@@ -3600,7 +3608,7 @@ private:
 			if (!already_indented) {
 				os << "   ";
 			}
-			print_source_loc(os, "   ", trace.source, trace.addr);
+                        print_source_loc(os, "   ", trace.source, colorize, trace.addr);
 			if (snippet) {
 				print_snippet(os, "      ", trace.source,
 						colorize, Color::yellow, trace_context_size);
@@ -3637,16 +3645,35 @@ private:
 		}
 	}
 
+        void print_filename(std::ostream &os, const std::string &filename,
+                            Colorize &colorize) {
+            std::string::size_type idx = filename.find_last_of("/");
+            if (idx == std::string::npos) {
+                colorize.set_color(Color::cyan);
+                os << filename;
+                colorize.set_color(Color::reset);
+            } else {
+                std::copy(filename.begin(), filename.begin() + idx + 1, std::ostreambuf_iterator(os));
+                colorize.set_color(Color::cyan);
+                std::copy(filename.begin() + idx + 1, filename.end(), std::ostreambuf_iterator(os));
+                colorize.set_color(Color::reset);
+            }
+        }
+
 	void print_source_loc(std::ostream& os, const char* indent,
 			const ResolvedTrace::SourceLoc& source_loc,
-			void* addr=nullptr) {
+                        Colorize &colorize, void* addr=nullptr) {
 		os << indent
-		   << "Source \""
-		   << source_loc.filename
-		   << "\", line "
-		   << source_loc.line
-		   << ", in "
-		   << source_loc.function;
+                   << "Source \"";
+                print_filename(os, source_loc.filename, colorize);
+                os << "\", line ";
+                colorize.set_color(Color::green);
+                os << source_loc.line;
+                colorize.set_color(Color::reset);
+                os << ", in ";
+                colorize.set_color(Color::red);
+                os << source_loc.function;
+                colorize.set_color(Color::reset);
 
 		if (address && addr != nullptr) {
 			os << " [" << addr << "]";
