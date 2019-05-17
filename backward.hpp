@@ -3653,9 +3653,9 @@ private:
                 os << filename;
                 colorize.set_color(Color::reset);
             } else {
-                std::copy(filename.begin(), filename.begin() + idx + 1, std::ostreambuf_iterator(os));
+                std::copy(filename.begin(), filename.begin() + idx + 1, std::ostreambuf_iterator<char>(os));
                 colorize.set_color(Color::cyan);
-                std::copy(filename.begin() + idx + 1, filename.end(), std::ostreambuf_iterator(os));
+                std::copy(filename.begin() + idx + 1, filename.end(), std::ostreambuf_iterator<char>(os));
                 colorize.set_color(Color::reset);
             }
         }
