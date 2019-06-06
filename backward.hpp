@@ -1684,72 +1684,91 @@ public:
 		// Let's try to find from which loaded object it comes from.
 		// The loaded object can be yourself btw.
 
-		Dl_info symbol_info;
+		Dl_info symbol_info = { NULL, NULL, NULL, NULL };
 		int dladdr_result = 0;
+		uintptr_t module_offset = 0;
 #ifndef __ANDROID__
 		link_map *link_map;
 		// We request the link map so we can get information about offsets
 		dladdr_result = dladdr1(trace.addr, &symbol_info,
 				reinterpret_cast<void**>(&link_map), RTLD_DL_LINKMAP);
+		module_offset = reinterpret_cast<uintptr_t>(link_map->l_addr);
 #else
 		// Android doesn't have dladdr1. Don't use the linker map.
 		dladdr_result = dladdr(trace.addr, &symbol_info);
+		module_offset = 0;
 #endif
-		if (!dladdr_result) {
+
+		std::string module_name;
+		if (!dladdr_result || !symbol_info.dli_fname) {
+			// We couldn't get a file name from the dynamic linker.
+			// Try parsing /proc/self/maps
+
+			module_name = get_library_from_proc_maps(
+							trace.addr, module_offset);
+		} else {
+			// Now we get in symbol_info:
+			// .dli_fname:
+			//      pathname of the shared object that contains the address.
+			// .dli_fbase:
+			//      where the object is loaded in memory.
+			// .dli_sname:
+			//      the name of the nearest symbol to trace.addr, we expect a
+			//      function name.
+			// .dli_saddr:
+			//      the exact address corresponding to .dli_sname.
+			//
+			// And in link_map:
+			// .l_addr:
+			//      difference between the address in the ELF file and the
+			//      address in memory
+			// l_name:
+			//      absolute pathname where the object was found
+
+			module_name = std::string(symbol_info.dli_fname);
+
+			// Convert the executable's relative path to an absolute one
+			std::string argv0;
+			{
+				std::ifstream ifs("/proc/self/cmdline");
+				std::getline(ifs, argv0, '\0');
+			}
+			if (module_name == argv0) {
+				module_name = read_symlink("/proc/self/exe");
+			}
+
+			struct stat buffer;
+			if (!stat(module_name.c_str(), &buffer) == 0) {
+				// We couldn't find the file, fall back to /proc/self/maps
+				// parsing
+
+				module_name = get_library_from_proc_maps(
+								trace.addr, module_offset);
+				if (!module_name.empty() && module_name[0] == '[') {
+					// We have a pseudo-file, like [vsdo] or [heap] or [stack],
+					// ignore it.
+					module_name.clear();
+				}
+			}
+		}
+
+		if (module_name.empty())
 			return trace; // dat broken trace...
-		}
-
-		std::string argv0;
-		{
-			std::ifstream ifs("/proc/self/cmdline");
-			std::getline(ifs, argv0, '\0');
-		}
-		std::string tmp;
-		if(symbol_info.dli_fname == argv0) {
-			tmp = read_symlink("/proc/self/exe");
-			symbol_info.dli_fname = tmp.c_str();
-		}
-
-		// Now we get in symbol_info:
-		// .dli_fname:
-		//      pathname of the shared object that contains the address.
-		// .dli_fbase:
-		//      where the object is loaded in memory.
-		// .dli_sname:
-		//      the name of the nearest symbol to trace.addr, we expect a
-		//      function name.
-		// .dli_saddr:
-		//      the exact address corresponding to .dli_sname.
-		//
-		// And in link_map:
-		// .l_addr:
-		//      difference between the address in the ELF file and the address
-		//      in memory
-		// l_name:
-		//      absolute pathname where the object was found
 
 		if (symbol_info.dli_sname) {
 			trace.object_function = demangle(symbol_info.dli_sname);
 		}
 
-		if (!symbol_info.dli_fname) {
-			return trace;
-		}
-
-		trace.object_filename = symbol_info.dli_fname;
-		dwarf_fileobject& fobj = load_object_with_dwarf(symbol_info.dli_fname);
+		trace.object_filename = module_name;
+		dwarf_fileobject& fobj = load_object_with_dwarf(trace.object_filename);
 		if (!fobj.dwarf_handle) {
 			return trace; // sad, we couldn't load the object :(
 		}
 
-#ifndef __ANDROID__
 		// Convert the address to a module relative one by looking at
 		// the module's loading address in the link map
-		Dwarf_Addr address = reinterpret_cast<uintptr_t>(trace.addr) -
-				reinterpret_cast<uintptr_t>(link_map->l_addr);
-#else
-		Dwarf_Addr address = reinterpret_cast<uintptr_t>(trace.addr);
-#endif
+		Dwarf_Addr address =
+				reinterpret_cast<uintptr_t>(trace.addr) - module_offset;
 
 		if (trace.object_function.empty()) {
 			symbol_cache_t::iterator it =
@@ -1880,9 +1899,29 @@ private:
 		}
 	};
 
-	typedef std::map<Dwarf_Off, die_cache_entry> die_cache_t;
+	struct proc_maps_entry {
+		size_t			start;
+		size_t			finish;
+		bool			read;
+		bool			write;
+		bool			exec;
+		bool			shared;
+		size_t			offset;
+		unsigned int	dev_major;
+		unsigned int	dev_minor;
+		unsigned int	inode;
+		std::string 	file;
 
-	typedef std::map<uintptr_t, std::string>     symbol_cache_t;
+		proc_maps_entry() : start(0), finish(0), read(false), write(false),
+							exec(false), shared(false), offset(0),
+							dev_major(0), dev_minor(0), inode(0) {}
+	};
+
+	typedef std::map<Dwarf_Off, die_cache_entry>	die_cache_t;
+
+	typedef std::map<uintptr_t, std::string>		symbol_cache_t;
+
+	typedef std::map<size_t, proc_maps_entry>		proc_maps_t;
 
 	struct dwarf_fileobject {
 		dwarf_file_t		file_handle;
@@ -1894,6 +1933,8 @@ private:
 		die_cache_t     	die_cache;
 		die_cache_entry*	current_cu;
 	};
+
+	proc_maps_t				proc_maps;
 
 	typedef details::hashtable<std::string, dwarf_fileobject>::type
 			fobj_dwarf_map_t;
@@ -2081,6 +2122,57 @@ private:
 		r.dwarf_handle = move(dwarf_handle);
 
 		return r;
+	}
+
+	std::string get_library_from_proc_maps(void* addr, uintptr_t& bias) {
+		if (proc_maps.empty()) {
+			std::ifstream ifs("/proc/self/maps");
+			std::string line;
+			while (std::getline(ifs, line)) {
+				size_t start = 0, finish = 0, offset = 0;
+				unsigned int major = 0, minor = 0, inode = 0;
+				char flags[4];
+				int file_name_start = 0, file_name_end = 0;
+				if (sscanf(line.c_str(),
+						"%zx-%zx %c%c%c%c %zx %x:%x %u %n%*[^\n]%n",
+						&start, &finish, &flags[0],
+						&flags[1], &flags[2], &flags[3],
+						&offset, &major, &minor, &inode,
+						&file_name_start, &file_name_end) > 9) {
+
+					proc_maps_entry& entry = proc_maps[finish];
+					entry.start = start;
+					entry.finish = finish;
+					entry.offset = offset;
+					entry.read = flags[0] == 'r';
+					entry.write = flags[1] == 'w';
+					entry.exec = flags[2] == 'x';
+					entry.shared = flags[3] == 's' || flags[3] == 'S';
+					entry.dev_major = major;
+					entry.dev_minor = minor;
+					entry.inode = inode;
+					if (file_name_end > file_name_start) {
+						entry.file = line.substr(file_name_start,
+											file_name_end - file_name_start);
+					}
+				}
+			}
+		}
+
+		size_t address = reinterpret_cast<size_t>(addr);
+		proc_maps_t::iterator it =
+				proc_maps.lower_bound(address);
+
+		if (it != proc_maps.end()
+				&& address >= it->second.start
+				&& address < it->second.finish
+				&& !it->second.file.empty()) {
+
+			bias = reinterpret_cast<uintptr_t>(it->second.start);
+			return it->second.file;
+		}
+
+		return "";
 	}
 
 	die_cache_entry& get_die_cache(dwarf_fileobject& fobj, Dwarf_Die die)
