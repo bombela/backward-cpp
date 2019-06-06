@@ -491,8 +491,8 @@ public:
 		// bools without throwing... It's a lost cause anyway!
 	}
 
-	T operator->() { return _val; }
-	const T operator->() const { return _val; }
+	T& operator->() { return _val; }
+	const T& operator->() const { return _val; }
 
 	typedef typename rm_ptr<T>::type& ref_t;
 	typedef const typename rm_ptr<T>::type& const_ref_t;
