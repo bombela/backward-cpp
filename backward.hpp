@@ -1926,7 +1926,7 @@ private:
 
 		dwarf_file_t file_handle;
 		file_handle.reset(open(filename_object.c_str(), O_RDONLY));
-		if (file_handle < 0) {
+		if (file_handle.get() < 0) {
 			return r;
 		}
 
