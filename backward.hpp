@@ -866,9 +866,7 @@ public:
 			if (st.size() == 0) {
 				return;
 			}
-			_symbols.reset(
-					backtrace_symbols(st.begin(), (int)st.size())
-					);
+			_symbols.reset(backtrace_symbols(st.begin(), static_cast<int>(st.size())));
 		}
 
 	ResolvedTrace resolve(ResolvedTrace trace) {
@@ -1325,7 +1323,7 @@ public:
 	ResolvedTrace resolve(ResolvedTrace trace) {
 		using namespace details;
 
-		Dwarf_Addr trace_addr = (Dwarf_Addr) trace.addr;
+		Dwarf_Addr trace_addr = static_cast<Dwarf_Addr>(reinterpret_cast<std::uintptr_t>(trace.addr));
 
 		if (!_dwfl_handle_initialized) {
 			// initialize dwfl...
@@ -1458,8 +1456,8 @@ public:
 			int line = 0, col = 0;
 			dwarf_lineno(srcloc, &line);
 			dwarf_linecol(srcloc, &col);
-			trace.source.line = line;
-			trace.source.col = col;
+			trace.source.line = static_cast<unsigned>(line);
+			trace.source.col = static_cast<unsigned>(col);
 		}
 
 		deep_first_search_by_pc(cudie, trace_addr - mod_bias,
@@ -1484,8 +1482,8 @@ private:
 	// defined types... grrr.
 	struct inliners_search_cb {
 		void operator()(Dwarf_Die* die) {
+			const char* name;
 			switch (dwarf_tag(die)) {
-				const char* name;
 				case DW_TAG_subprogram:
 					if ((name = dwarf_diename(die))) {
 						trace.source.function = name;
@@ -1493,27 +1491,31 @@ private:
 					break;
 
 				case DW_TAG_inlined_subroutine:
-					ResolvedTrace::SourceLoc sloc;
-					Dwarf_Attribute attr_mem;
+					{
+						ResolvedTrace::SourceLoc sloc;
+						Dwarf_Attribute attr_mem;
 
-					if ((name = dwarf_diename(die))) {
-						sloc.function = name;
-					}
-					if ((name = die_call_file(die))) {
-						sloc.filename = name;
-					}
+						if ((name = dwarf_diename(die))) {
+								sloc.function = name;
+						}
+						if ((name = die_call_file(die))) {
+								sloc.filename = name;
+						}
 
-					Dwarf_Word line = 0, col = 0;
-					dwarf_formudata(dwarf_attr(die, DW_AT_call_line,
+						Dwarf_Word line = 0, col = 0;
+						dwarf_formudata(dwarf_attr(die, DW_AT_call_line,
 								&attr_mem), &line);
-					dwarf_formudata(dwarf_attr(die, DW_AT_call_column,
+						dwarf_formudata(dwarf_attr(die, DW_AT_call_column,
 								&attr_mem), &col);
-					sloc.line = (unsigned)line;
-					sloc.col = (unsigned)col;
+                                                sloc.line = static_cast<unsigned>(line);
+                                                sloc.col = static_cast<unsigned>(col);
 
-					trace.inliners.push_back(sloc);
+						trace.inliners.push_back(sloc);
+					}
 					break;
-			};
+				default:
+					break;
+                        }
 		}
 		ResolvedTrace& trace;
 		inliners_search_cb(ResolvedTrace& t): trace(t) {}
@@ -1566,7 +1568,9 @@ private:
 					if (die_has_pc(die, pc)) {
 						return result;
 					}
-			};
+				default:
+					break;
+			}
 			bool declaration = false;
 			Dwarf_Attribute attr_mem;
 			dwarf_formflag(dwarf_attr(die, DW_AT_declaration,
@@ -1624,7 +1628,7 @@ private:
 		dwarf_formsdata(dwarf_attr(die, DW_AT_call_file, &attr_mem),
 				&file_idx);
 
-		if (file_idx == 0) {
+		if (file_idx == 0) { // FIXME should not be file_idx < 0 instead?
 			return 0;
 		}
 
@@ -1641,7 +1645,7 @@ private:
 			return 0;
 		}
 
-		return dwarf_filesrc(files, file_idx, 0, 0);
+		return dwarf_filesrc(files, static_cast<size_t>(file_idx), 0, 0);
 	}
 
 };
