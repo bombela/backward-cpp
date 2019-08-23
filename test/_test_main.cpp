@@ -24,15 +24,26 @@
 #include "test.hpp"
 #include <cstdio>
 #include <cstdlib>
+
+#ifdef _WIN32
+#include <Windows.h>
+#define strcasecmp _stricmp
+#else
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 #if defined(__has_include) && __has_include(<error.h>)
 #include <error.h>
 #else
 #include <stdarg.h>
 
-#ifndef __APPLE__
+#ifdef _WIN32
+char argv0[MAX_PATH];
+inline const char *getprogname() {
+  return GetModuleFileName(NULL, argv0, sizeof(argv0)) ? argv0 : NULL;
+}
+#elif !defined(__APPLE__)
 // N.B.  getprogname() is an Apple/BSD-ism.
 // program_invocation_name is a GLIBC-ism, but it's also
 //  supported by libmusl.
@@ -59,13 +70,71 @@ void error(int status, int errnum, const char *format, ...) {
 }
 #endif
 
-test::test_registry_t test::test_registry;
 using namespace test;
 
-bool run_test(TestBase &test) {
+bool run_test(TestBase &test, bool use_child_process = true) {
+  if (!use_child_process) {
+    exit(static_cast<int>(test.run()));
+  }
+
   printf("-- running test case: %s\n", test.name);
 
   fflush(stdout);
+
+  test::TestStatus status = test::SUCCESS;
+
+#ifdef _WIN32
+  char filename[256];
+  GetModuleFileName(NULL, filename, 256); // TODO: check for error
+  std::string cmd_line = filename;
+  cmd_line += " --nofork ";
+  cmd_line += test.name;
+
+  STARTUPINFO si;
+  PROCESS_INFORMATION pi;
+  ZeroMemory(&si, sizeof(si));
+  si.cb = sizeof(si);
+  ZeroMemory(&pi, sizeof(pi));
+
+  if (!CreateProcessA(nullptr, const_cast<char *>(cmd_line.c_str()), nullptr,
+                      nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+    printf("unable to create process\n");
+    exit(-1);
+  }
+
+  WaitForSingleObject(pi.hProcess, INFINITE);
+
+  DWORD exit_code;
+  GetExitCodeProcess(pi.hProcess, &exit_code);
+  switch (exit_code) {
+  case 3:
+    status = test::SIGNAL_ABORT;
+    break;
+  case 5:
+    status = test::EXCEPTION_UNCAUGHT;
+    break;
+  case EXCEPTION_ACCESS_VIOLATION:
+    status = test::SIGNAL_SEGFAULT;
+    break;
+  case EXCEPTION_STACK_OVERFLOW:
+    status = test::SIGNAL_SEGFAULT;
+    break;
+  case EXCEPTION_INT_DIVIDE_BY_ZERO:
+    status = test::SIGNAL_DIVZERO;
+    break;
+  }
+  printf("Exit code: %lu\n", exit_code);
+
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
+
+  if (test.expected_status == test::ASSERT_FAIL) {
+    // assert calls abort on windows
+    return (status & test::SIGNAL_ABORT);
+  }
+
+#else
+
   pid_t child_pid = fork();
   if (child_pid == 0) {
     exit(static_cast<int>(test.run()));
@@ -76,8 +145,6 @@ bool run_test(TestBase &test) {
 
   int child_status = 0;
   waitpid(child_pid, &child_status, 0);
-
-  test::TestStatus status;
 
   if (WIFEXITED(child_status)) {
     int exit_status = WEXITSTATUS(child_status);
@@ -103,9 +170,9 @@ bool run_test(TestBase &test) {
     default:
       status = test::SIGNAL_UNCAUGHT;
     }
-  } else {
-    status = test::SUCCESS;
   }
+
+#endif
 
   if (test.expected_status == test::FAILED) {
     return (status & test::FAILED);
@@ -119,6 +186,25 @@ bool run_test(TestBase &test) {
 }
 
 int main(int argc, const char *const argv[]) {
+
+#ifdef _WIN32
+  _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
+
+  if (argc == 3 && strcmp("--nofork", argv[1]) == 0) {
+    // Windows has no fork, so we simulate it
+    // we only execute one test, without forking
+    for (test_registry_t::iterator it = test_registry().begin();
+         it != test_registry().end(); ++it) {
+      TestBase &test = **it;
+      if (strcasecmp(argv[2], test.name) == 0) {
+        run_test(test, false);
+
+        return 0;
+      }
+    }
+    return -1;
+  }
 
   size_t success_cnt = 0;
   size_t total_cnt = 0;
@@ -145,9 +231,9 @@ int main(int argc, const char *const argv[]) {
       printf("** test case FAILED : %s\n", test.name);
     }
   }
-  printf("-- tests passing: %lu/%lu", success_cnt, total_cnt);
+  printf("-- tests passing: %zu/%zu", success_cnt, total_cnt);
   if (total_cnt) {
-    printf(" (%lu%%)\n", success_cnt * 100 / total_cnt);
+    printf(" (%zu%%)\n", success_cnt * 100 / total_cnt);
   } else {
     printf("\n");
   }

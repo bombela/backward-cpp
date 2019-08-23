@@ -102,7 +102,7 @@ if(BACKWARD_TESTS)
 
 		add_executable(${test_name} ${src} ${ARGN} $<TARGET_OBJECTS:test_main>)
 
-		target_link_libraries(${test_name} PRIVATE Backward::Backward test_main)
+		target_link_libraries(${test_name} PRIVATE Backward::Backward)
 
 		add_test(NAME ${name} COMMAND ${test_name})
 	endmacro()
