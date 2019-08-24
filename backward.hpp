@@ -65,6 +65,8 @@
 #endif
 #endif
 
+#define NOINLINE __attribute__((noinline))
+
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -710,9 +712,8 @@ template <typename F> size_t unwind(F f, size_t depth) {
 template <>
 class StackTraceImpl<system_tag::current_tag> : public StackTraceImplHolder {
 public:
-  __attribute__((noinline)) // TODO use some macro
-  size_t
-  load_here(size_t depth = 32) {
+  NOINLINE
+  size_t load_here(size_t depth = 32) {
     load_thread_info();
     if (depth == 0) {
       return 0;
@@ -751,9 +752,8 @@ private:
 template <>
 class StackTraceImpl<system_tag::current_tag> : public StackTraceImplHolder {
 public:
-  __attribute__((noinline)) // TODO use some macro
-  size_t
-  load_here(size_t depth = 32) {
+  NOINLINE
+  size_t load_here(size_t depth = 32) {
     load_thread_info();
     if (depth == 0) {
       return 0;
