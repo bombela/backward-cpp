@@ -30,7 +30,7 @@ using namespace backward;
 typedef StackTrace stacktrace_t;
 
 void end_of_our_journey(stacktrace_t &st) {
-  if (not st.size()) {
+  if (!st.size()) {
     st.load_here();
   }
 }

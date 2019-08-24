@@ -41,7 +41,7 @@ struct AssertFailedError : std::exception {
       : basename(_basename(filename)), line(_line), errmsg(_errmsg) {}
 
   const char *what() const throw() {
-    if (not _what.size()) {
+    if (!_what.size()) {
       std::ostringstream ss;
       ss << "assertion failed (" << basename << ":" << line;
       ss << ") " << errmsg;
@@ -105,10 +105,14 @@ struct TestBase {
 };
 
 typedef std::vector<TestBase *> test_registry_t;
-extern test_registry_t test_registry;
+inline test_registry_t &test_registry() {
+  static test_registry_t reg;
+  return reg;
+}
 
-TestBase::TestBase(const char *n, TestStatus s) : name(n), expected_status(s) {
-  test_registry.push_back(this);
+inline TestBase::TestBase(const char *n, TestStatus s)
+    : name(n), expected_status(s) {
+  test_registry().push_back(this);
 }
 
 } // namespace test
@@ -135,9 +139,9 @@ TestBase::TestBase(const char *n, TestStatus s) : name(n), expected_status(s) {
          : throw ::test::AssertFailedError(__FILE__, __LINE__, #expr)
 
 #define _ASSERT_BINOP(a, b, cmp)                                               \
-  (not(a cmp b)) ? static_cast<void>(0)                                        \
-                 : throw ::test::AssertFailedError(                            \
-                       __FILE__, __LINE__, "because " #a " " #cmp " " #b)
+  (!(a cmp b)) ? static_cast<void>(0)                                          \
+               : throw ::test::AssertFailedError(                              \
+                     __FILE__, __LINE__, "because " #a " " #cmp " " #b)
 
 #define ASSERT_EQ(a, b) _ASSERT_BINOP(a, b, !=)
 #define ASSERT_NE(a, b) _ASSERT_BINOP(a, b, ==)

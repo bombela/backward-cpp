@@ -122,8 +122,8 @@ int main(int argc, const char *const argv[]) {
 
   size_t success_cnt = 0;
   size_t total_cnt = 0;
-  for (test_registry_t::iterator it = test_registry.begin();
-       it != test_registry.end(); ++it) {
+  for (test_registry_t::iterator it = test_registry().begin();
+       it != test_registry().end(); ++it) {
     TestBase &test = **it;
 
     bool consider_test = (argc <= 1);
@@ -133,7 +133,7 @@ int main(int argc, const char *const argv[]) {
         break;
       }
     }
-    if (not consider_test) {
+    if (!consider_test) {
       continue;
     }
 
