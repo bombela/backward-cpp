@@ -1686,7 +1686,7 @@ public:
 
 		Dl_info symbol_info;
 		int dladdr_result = 0;
-#ifndef __ANDROID__
+#if defined(__GLIBC__)
 		link_map *link_map;
 		// We request the link map so we can get information about offsets
 		dladdr_result = dladdr1(trace.addr, &symbol_info,
@@ -1742,7 +1742,7 @@ public:
 			return trace; // sad, we couldn't load the object :(
 		}
 
-#ifndef __ANDROID__
+#if defined(__GLIBC__)
 		// Convert the address to a module relative one by looking at
 		// the module's loading address in the link map
 		Dwarf_Addr address = reinterpret_cast<uintptr_t>(trace.addr) -
