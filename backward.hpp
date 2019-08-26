@@ -611,7 +611,7 @@ template <typename TAG>
 class StackTraceImpl {
 public:
 	size_t size() const { return 0; }
-	Trace operator[](size_t) { return Trace(); }
+	Trace operator[](size_t) const { return Trace(); }
 	size_t load_here(size_t=0) { return 0; }
 	size_t load_from(void*, size_t=0) { return 0; }
 	size_t thread_id() const { return 0; }
