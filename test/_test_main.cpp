@@ -24,14 +24,20 @@
 #include "test.hpp"
 #include <cstdio>
 #include <cstdlib>
-#ifndef __APPLE__
-#include <error.h>
-#endif
 #include <unistd.h>
 #include <sys/wait.h>
 
-#ifdef __APPLE__
+#if defined(__has_include) && __has_include(<error.h>)
+#include <error.h>
+#else
 #include <stdarg.h>
+
+#ifndef __APPLE__
+// N.B.  getprogname() is an Apple/BSD-ism.
+// program_invocation_name is a GLIBC-ism, but it's also
+//  supported by libmusl.
+#define getprogname() program_invocation_name
+#endif
 
 void error(int status, int errnum, const char *format, ...) {
 	fflush(stdout);

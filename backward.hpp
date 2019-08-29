@@ -611,7 +611,7 @@ template <typename TAG>
 class StackTraceImpl {
 public:
 	size_t size() const { return 0; }
-	Trace operator[](size_t) { return Trace(); }
+	Trace operator[](size_t) const { return Trace(); }
 	size_t load_here(size_t=0) { return 0; }
 	size_t load_from(void*, size_t=0) { return 0; }
 	size_t thread_id() const { return 0; }
@@ -1686,7 +1686,7 @@ public:
 
 		Dl_info symbol_info;
 		int dladdr_result = 0;
-#ifndef __ANDROID__
+#if defined(__GLIBC__)
 		link_map *link_map;
 		// We request the link map so we can get information about offsets
 		dladdr_result = dladdr1(trace.addr, &symbol_info,
@@ -1742,7 +1742,7 @@ public:
 			return trace; // sad, we couldn't load the object :(
 		}
 
-#ifndef __ANDROID__
+#if defined(__GLIBC__)
 		// Convert the address to a module relative one by looking at
 		// the module's loading address in the link map
 		Dwarf_Addr address = reinterpret_cast<uintptr_t>(trace.addr) -
