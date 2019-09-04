@@ -1880,15 +1880,46 @@ private:
 		}
 	};
 
-	typedef std::map<Dwarf_Off, die_cache_entry> die_cache_t;
+	struct arange_cache_entry {
+		Dwarf_Addr		start;
+		Dwarf_Addr		finish;
+		Dwarf_Off		cu_die;
+
+		arange_cache_entry(
+				Dwarf_Addr _start, Dwarf_Addr _finish, Dwarf_Off _cu_die) :
+				start(_start), finish(_finish), cu_die(_cu_die) {}
+	};
+
+	struct proc_maps_entry {
+		size_t			start;
+		size_t			finish;
+		bool			read;
+		bool			write;
+		bool			exec;
+		bool			shared;
+		size_t			offset;
+		unsigned int	dev_major;
+		unsigned int	dev_minor;
+		unsigned int	inode;
+		std::string 	file;
+
+		proc_maps_entry() : start(0), finish(0), read(false), write(false),
+							exec(false), shared(false), offset(0),
+							dev_major(0), dev_minor(0), inode(0) {}
+	};
+
+	typedef std::map<Dwarf_Off, die_cache_entry>	die_cache_t;
 
 	typedef std::map<uintptr_t, std::string>     symbol_cache_t;
+
+	typedef std::map<Dwarf_Off, arange_cache_entry> aranges_cache_t;
 
 	struct dwarf_fileobject {
 		dwarf_file_t		file_handle;
 		dwarf_elf_t			elf_handle;
 		dwarf_handle_t		dwarf_handle;
 		symbol_cache_t		symbol_cache;
+		aranges_cache_t		aranges_cache;
 
 		// Die cache
 		die_cache_t     	die_cache;
@@ -1904,6 +1935,63 @@ private:
 			return false;
 		}
 		return strcmp(a, b) == 0;
+	}
+
+	void cache_aranges(dwarf_fileobject& fobj) {
+		// Cache the .debug_aranges information, merging overlapping ranges
+		Dwarf_Arange *arange = 0;
+		Dwarf_Signed arange_count = 0;
+		Dwarf_Error error = DW_DLE_NE;
+		Dwarf_Debug dwarf_debug = fobj.dwarf_handle.get();
+
+			if (dwarf_get_aranges(
+				dwarf_debug, &arange, &arange_count, &error) == DW_DLV_OK) {
+
+				Dwarf_Signed i = 0;
+				Dwarf_Addr current_start = 0;
+				Dwarf_Addr current_finish = 0;
+				Dwarf_Off current_cu_die = 0;
+				for (i = 0; i < arange_count; ++i) {
+					Dwarf_Addr start = 0;
+					Dwarf_Unsigned length = 0;
+					Dwarf_Off cu_die = 0;
+					if (dwarf_get_arange_info(
+							arange[i], &start, &length, &cu_die, &error)
+							== DW_DLV_OK) {
+
+						if (!(start == 0 || length == 0 || cu_die == 0)) {
+							// Try to merge as many ranges as possible. Some
+							// ranges overlap exactly and some others are
+							// separated by one byte. We assume the ranges
+							// separated by one byte can be merged.
+							if (current_start == 0) {
+								current_start = start;
+								current_finish = start + length - 1;
+								current_cu_die = cu_die;
+							} else {
+								if ((start == current_finish
+									|| start - 1 == current_finish)
+									&& current_cu_die == cu_die) {
+									current_finish = start + length - 1;
+								} else {
+									fobj.aranges_cache.insert(
+										std::pair<Dwarf_Off,arange_cache_entry>(
+											current_finish,
+											arange_cache_entry(current_start,
+															   current_finish,
+															   current_cu_die)
+										));
+									current_start = start;
+									current_finish = start + length - 1;
+									current_cu_die = cu_die;
+								}
+							}
+						}
+						dwarf_dealloc(dwarf_debug, arange[i], DW_DLA_ARANGE);
+					}
+			}
+			dwarf_dealloc(dwarf_debug, arange, DW_DLA_LIST);
+		}
 	}
 
 	dwarf_fileobject& load_object_with_dwarf(
@@ -3000,38 +3088,23 @@ private:
 
 		Dwarf_Debug dwarf = fobj.dwarf_handle.get();
 		Dwarf_Error error = DW_DLE_NE;
-		Dwarf_Arange *aranges;
-		Dwarf_Signed arange_count;
 
 		Dwarf_Die returnDie;
 		bool found = false;
-		if (dwarf_get_aranges(
-				dwarf, &aranges, &arange_count, &error) != DW_DLV_OK) {
-			aranges = NULL;
+
+		if (fobj.aranges_cache.empty()) {
+			cache_aranges(fobj);
 		}
+		aranges_cache_t::const_iterator it =
+				fobj.aranges_cache.lower_bound(addr);
 
-		if (aranges) {
-			// We have aranges. Get the one where our address is.
-			Dwarf_Arange arange;
-			if (dwarf_get_arange(
-					aranges, arange_count, addr, &arange, &error)
-						== DW_DLV_OK) {
+		if (it != fobj.aranges_cache.end()
+				&& addr >= it->second.start
+				&& addr < it->second.finish) {
+			int dwarf_result = dwarf_offdie_b(
+					dwarf, it->second.cu_die, 1, &returnDie, &error);
 
-				// We found our address. Get the compilation-unit DIE offset
-				// represented by the given address range.
-				Dwarf_Off cu_die_offset;
-				if (dwarf_get_cu_die_offset(arange, &cu_die_offset, &error)
-						== DW_DLV_OK) {
-					// Get the DIE at the offset returned by the aranges search.
-					// We set is_info to 1 to specify that the offset is from
-					// the .debug_info section (and not .debug_types)
-					int dwarf_result = dwarf_offdie_b(
-							dwarf, cu_die_offset, 1, &returnDie, &error);
-
-					found = dwarf_result == DW_DLV_OK;
-				}
-				dwarf_dealloc(dwarf, arange, DW_DLA_ARANGE);
-			}
+			found = dwarf_result == DW_DLV_OK;
 		}
 
 		if (found)
