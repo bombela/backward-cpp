@@ -27,6 +27,14 @@
 
 using namespace backward;
 
+class StdoutPrinter {
+public:
+	static StdioPrinter& get_instance() {
+		static StdioPrinter sp(stdout);
+		return sp;
+	}
+};
+
 typedef StackTrace stacktrace_t;
 
 void end_of_our_journey(stacktrace_t& st) {
@@ -69,10 +77,10 @@ TEST (recursion) {
 
 		std::cout << "rec(" << input << ") == " << r << std::endl;
 
-		Printer printer;
+		StdioPrinter& printer = StdoutPrinter::get_instance();
 		//    printer.address = true;
 		printer.object = true;
-		printer.print(st, stdout);
+		printer.print(st);
 	}
 }
 
@@ -94,6 +102,5 @@ TEST (fibrecursive) {
 
 	std::cout << "fib(" << input << ") == " << r << std::endl;
 
-	Printer printer;
-	printer.print(st, stdout);
+	StdoutPrinter::get_instance().print(st);
 }

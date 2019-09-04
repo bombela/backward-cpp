@@ -23,11 +23,31 @@
 
 #include "backward.hpp"
 
+#include <iostream>
+
 #include <signal.h>
 #include <stdio.h>
 #include "test/test.hpp"
 
 using namespace backward;
+
+class VoidPrinter {
+public:
+	typedef VoidPrinter PrinterImpl;
+	bool address;
+
+	VoidPrinter() {}
+
+	template <typename ST>
+	void print(ST&) {
+	}
+
+	static PrinterImpl& get_instance() {
+		static PrinterImpl sp;
+		return sp;
+	}
+};
+
 
 void badass_function() {
 	char* ptr = (char*)42;
@@ -37,7 +57,7 @@ void badass_function() {
 TEST_SEGFAULT (pprint_sigsev) {
 	std::vector<int> signals;
 	signals.push_back(SIGSEGV);
-	SignalHandling sh(signals);
+	SignalHandling<VoidPrinter> sh(signals);
 	std::cout << std::boolalpha << "sh.loaded() == " << sh.loaded() << std::endl;
 	badass_function();
 }
@@ -45,7 +65,7 @@ TEST_SEGFAULT (pprint_sigsev) {
 TEST_SEGFAULT (wont_pprint) {
 	std::vector<int> signals;
 	signals.push_back(SIGABRT);
-	SignalHandling sh(signals);
+	SignalHandling<VoidPrinter> sh(signals);
 	std::cout << std::boolalpha << "sh.loaded() == " << sh.loaded() << std::endl;
 	badass_function();
 }

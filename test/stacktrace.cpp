@@ -27,6 +27,14 @@
 
 using namespace backward;
 
+class StdoutPrinter {
+public:
+	static StdioPrinter& get_instance() {
+		static StdioPrinter sp(stdout);
+		return sp;
+	}
+};
+
 void collect_trace(StackTrace& st) {
 	st.load_here();
 }
@@ -35,8 +43,7 @@ TEST (minitrace) {
 	StackTrace st;
 	collect_trace(st);
 
-	Printer printer;
-	printer.print(st, stdout);
+	StdoutPrinter::get_instance().print(st);
 }
 
 void d(StackTrace& st) {
@@ -60,6 +67,5 @@ TEST (smalltrace) {
 	StackTrace st;
 	a(st);
 
-	Printer printer;
-	printer.print(st, stdout);
+	StdoutPrinter::get_instance().print(st);
 }
