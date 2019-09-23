@@ -811,32 +811,58 @@ private:
 
 #ifdef BACKWARD_SYSTEM_LINUX
 
-static std::string get_argv0() {
-  std::string argv0;
-  std::getline(std::ifstream("/proc/self/cmdline"), argv0, '\0');
-  return argv0;
-}
-
-static std::string read_symlink(std::string const &symlink_path) {
-  std::string path;
-  path.resize(100);
-
-  while (true) {
-    ssize_t len =
-        ::readlink(symlink_path.c_str(), &*path.begin(), path.size());
-    if (len < 0) {
-      return "";
-    }
-    if (static_cast<size_t>(len) == path.size()) {
-      path.resize(path.size() * 2);
+class TraceResolverLinuxBase
+    : public TraceResolverImplBase {
+public:
+  TraceResolverLinuxBase()
+    : argv0_(get_argv0()), exec_path_(read_symlink("/proc/self/exe")) {
+  }
+  std::string resolve_exec_path(Dl_info &symbol_info) const {
+    // mutates symbol_info.dli_fname to be filename to open and returns filename to display
+    if(symbol_info.dli_fname == argv0_) {
+      // dladdr returns argv[0] in dli_fname for symbols contained in
+      // the main executable, which is not a valid path if the
+      // executable was found by a search of the PATH environment
+      // variable; In that case, we actually open /proc/self/exe, which
+      // is always the actual executable (even if it was deleted/replaced!)
+      // but display the path that /proc/self/exe links to.
+      symbol_info.dli_fname = "/proc/self/exe";
+      return exec_path_;
     } else {
-      path.resize(static_cast<std::string::size_type>(len));
-      break;
+      return symbol_info.dli_fname;
     }
   }
+private:
+  std::string argv0_;
+  std::string exec_path_;
 
-  return path;
-}
+  static std::string get_argv0() {
+    std::string argv0;
+    std::getline(std::ifstream("/proc/self/cmdline"), argv0, '\0');
+    return argv0;
+  }
+
+  static std::string read_symlink(std::string const &symlink_path) {
+    std::string path;
+    path.resize(100);
+
+    while (true) {
+      ssize_t len =
+          ::readlink(symlink_path.c_str(), &*path.begin(), path.size());
+      if (len < 0) {
+        return "";
+      }
+      if (static_cast<size_t>(len) == path.size()) {
+        path.resize(path.size() * 2);
+      } else {
+        path.resize(static_cast<std::string::size_type>(len));
+        break;
+      }
+    }
+
+    return path;
+  }
+};
 
 template <typename STACKTRACE_TAG> class TraceResolverLinuxImpl;
 
@@ -844,7 +870,7 @@ template <typename STACKTRACE_TAG> class TraceResolverLinuxImpl;
 
 template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::backtrace_symbol>
-    : public TraceResolverImplBase {
+    : public TraceResolverLinuxBase {
 public:
   template <class ST> void load_stacktrace(ST &st) {
     using namespace details;
@@ -887,7 +913,7 @@ private:
 
 template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::libbfd>
-    : public TraceResolverImplBase {
+    : public TraceResolverLinuxBase {
 public:
   TraceResolverLinuxImpl() : _bfd_loaded(false) {}
 
@@ -901,12 +927,6 @@ public:
     // The loaded object can be yourself btw.
     if (!dladdr(trace.addr, &symbol_info)) {
       return trace; // dat broken trace...
-    }
-
-    std::string tmp;
-    if (symbol_info.dli_fname == get_argv0()) {
-      tmp = read_symlink("/proc/self/exe");
-      symbol_info.dli_fname = tmp.c_str();
     }
 
     // Now we get in symbol_info:
@@ -928,7 +948,7 @@ public:
       return trace;
     }
 
-    trace.object_filename = symbol_info.dli_fname;
+    trace.object_filename = resolve_exec_path(symbol_info);
     bfd_fileobject &fobj = load_object_with_bfd(symbol_info.dli_fname);
     if (!fobj.handle) {
       return trace; // sad, we couldn't load the object :(
@@ -1257,7 +1277,7 @@ private:
 
 template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::libdw>
-    : public TraceResolverImplBase {
+    : public TraceResolverLinuxBase {
 public:
   TraceResolverLinuxImpl() : _dwfl_handle_initialized(false) {}
 
@@ -1586,7 +1606,7 @@ private:
 
 template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::libdwarf>
-    : public TraceResolverImplBase {
+    : public TraceResolverLinuxBase {
 public:
   TraceResolverLinuxImpl() : _dwarf_loaded(false) {}
 
@@ -1611,12 +1631,6 @@ public:
 #endif
     if (!dladdr_result) {
       return trace; // dat broken trace...
-    }
-
-    std::string tmp;
-    if (symbol_info.dli_fname == get_argv0()) {
-      tmp = read_symlink("/proc/self/exe");
-      symbol_info.dli_fname = tmp.c_str();
     }
 
     // Now we get in symbol_info:
@@ -1645,7 +1659,7 @@ public:
       return trace;
     }
 
-    trace.object_filename = symbol_info.dli_fname;
+    trace.object_filename = resolve_exec_path(symbol_info);
     dwarf_fileobject &fobj = load_object_with_dwarf(symbol_info.dli_fname);
     if (!fobj.dwarf_handle) {
       return trace; // sad, we couldn't load the object :(
