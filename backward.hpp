@@ -811,6 +811,33 @@ private:
 
 #ifdef BACKWARD_SYSTEM_LINUX
 
+static std::string get_argv0() {
+  std::string argv0;
+  std::getline(std::ifstream("/proc/self/cmdline"), argv0, '\0');
+  return argv0;
+}
+
+static std::string read_symlink(std::string const &symlink_path) {
+  std::string path;
+  path.resize(100);
+
+  while (true) {
+    ssize_t len =
+        ::readlink(symlink_path.c_str(), &*path.begin(), path.size());
+    if (len < 0) {
+      return "";
+    }
+    if (static_cast<size_t>(len) == path.size()) {
+      path.resize(path.size() * 2);
+    } else {
+      path.resize(static_cast<std::string::size_type>(len));
+      break;
+    }
+  }
+
+  return path;
+}
+
 template <typename STACKTRACE_TAG> class TraceResolverLinuxImpl;
 
 #if BACKWARD_HAS_BACKTRACE_SYMBOL == 1
@@ -861,27 +888,6 @@ private:
 template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::libbfd>
     : public TraceResolverImplBase {
-  static std::string read_symlink(std::string const &symlink_path) {
-    std::string path;
-    path.resize(100);
-
-    while (true) {
-      ssize_t len =
-          ::readlink(symlink_path.c_str(), &*path.begin(), path.size());
-      if (len < 0) {
-        return "";
-      }
-      if (static_cast<size_t>(len) == path.size()) {
-        path.resize(path.size() * 2);
-      } else {
-        path.resize(static_cast<std::string::size_type>(len));
-        break;
-      }
-    }
-
-    return path;
-  }
-
 public:
   TraceResolverLinuxImpl() : _bfd_loaded(false) {}
 
@@ -897,13 +903,8 @@ public:
       return trace; // dat broken trace...
     }
 
-    std::string argv0;
-    {
-      std::ifstream ifs("/proc/self/cmdline");
-      std::getline(ifs, argv0, '\0');
-    }
     std::string tmp;
-    if (symbol_info.dli_fname == argv0) {
+    if (symbol_info.dli_fname == get_argv0()) {
       tmp = read_symlink("/proc/self/exe");
       symbol_info.dli_fname = tmp.c_str();
     }
@@ -1586,27 +1587,6 @@ private:
 template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::libdwarf>
     : public TraceResolverImplBase {
-  static std::string read_symlink(std::string const &symlink_path) {
-    std::string path;
-    path.resize(100);
-
-    while (true) {
-      ssize_t len =
-          ::readlink(symlink_path.c_str(), &*path.begin(), path.size());
-      if (len < 0) {
-        return "";
-      }
-      if ((size_t)len == path.size()) {
-        path.resize(path.size() * 2);
-      } else {
-        path.resize(len);
-        break;
-      }
-    }
-
-    return path;
-  }
-
 public:
   TraceResolverLinuxImpl() : _dwarf_loaded(false) {}
 
@@ -1633,13 +1613,8 @@ public:
       return trace; // dat broken trace...
     }
 
-    std::string argv0;
-    {
-      std::ifstream ifs("/proc/self/cmdline");
-      std::getline(ifs, argv0, '\0');
-    }
     std::string tmp;
-    if (symbol_info.dli_fname == argv0) {
+    if (symbol_info.dli_fname == get_argv0()) {
       tmp = read_symlink("/proc/self/exe");
       symbol_info.dli_fname = tmp.c_str();
     }
