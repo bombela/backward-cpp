@@ -30,7 +30,7 @@ using namespace backward;
 typedef StackTrace stacktrace_t;
 
 void end_of_our_journey(stacktrace_t &st) {
-  if (not st.size()) {
+  if (!st.size()) {
     st.load_here();
   }
 }
@@ -50,8 +50,7 @@ namespace titi {
 struct foo {
 
   union bar {
-    __attribute__((noinline)) static int trampoline(stacktrace_t &st,
-                                                    int level) {
+    NOINLINE static int trampoline(stacktrace_t &st, int level) {
       return rec(st, level);
     }
   };

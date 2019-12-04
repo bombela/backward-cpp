@@ -31,7 +31,7 @@
 #if defined(BACKWARD_CXX11)
 #elif defined(BACKWARD_CXX98)
 #else
-#if __cplusplus >= 201103L
+#if __cplusplus >= 201103L || (defined(_MSC_VER) && _MSC_VER >= 1800)
 #define BACKWARD_CXX11
 #define BACKWARD_ATLEAST_CXX11
 #define BACKWARD_ATLEAST_CXX98
@@ -55,15 +55,20 @@
 #if defined(BACKWARD_SYSTEM_LINUX)
 #elif defined(BACKWARD_SYSTEM_DARWIN)
 #elif defined(BACKWARD_SYSTEM_UNKNOWN)
+#elif defined(BACKWARD_SYSTEM_WINDOWS)
 #else
 #if defined(__linux) || defined(__linux__)
 #define BACKWARD_SYSTEM_LINUX
 #elif defined(__APPLE__)
 #define BACKWARD_SYSTEM_DARWIN
+#elif defined(_WIN32)
+#define BACKWARD_SYSTEM_WINDOWS
 #else
 #define BACKWARD_SYSTEM_UNKNOWN
 #endif
 #endif
+
+#define NOINLINE __attribute__((noinline))
 
 #include <algorithm>
 #include <cctype>
@@ -299,6 +304,49 @@
 #endif
 #endif // defined(BACKWARD_SYSTEM_DARWIN)
 
+#if defined(BACKWARD_SYSTEM_WINDOWS)
+
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+
+#define NOMINMAX
+#include <Windows.h>
+#include <winnt.h>
+
+#include <Psapi.h>
+#include <signal.h>
+
+#ifndef __clang__
+#undef NOINLINE
+#define NOINLINE __declspec(noinline)
+#endif
+
+#pragma comment(lib, "psapi.lib")
+#pragma comment(lib, "dbghelp.lib")
+
+// Comment / packing is from stackoverflow:
+// https://stackoverflow.com/questions/6205981/windows-c-stack-trace-from-a-running-app/28276227#28276227
+// Some versions of imagehlp.dll lack the proper packing directives themselves
+// so we need to do it.
+#pragma pack(push, before_imagehlp, 8)
+#include <imagehlp.h>
+#pragma pack(pop, before_imagehlp)
+
+// TODO maybe these should be undefined somewhere else?
+#undef BACKWARD_HAS_UNWIND
+#undef BACKWARD_HAS_BACKTRACE
+#if BACKWARD_HAS_PDB_SYMBOL == 1
+#else
+#undef BACKWARD_HAS_PDB_SYMBOL
+#define BACKWARD_HAS_PDB_SYMBOL 1
+#endif
+
+#endif
+
 #if BACKWARD_HAS_UNWIND == 1
 
 #include <unwind.h>
@@ -355,12 +403,15 @@ namespace system_tag {
 struct linux_tag; // seems that I cannot call that "linux" because the name
 // is already defined... so I am adding _tag everywhere.
 struct darwin_tag;
+struct windows_tag;
 struct unknown_tag;
 
 #if defined(BACKWARD_SYSTEM_LINUX)
 typedef linux_tag current_tag;
 #elif defined(BACKWARD_SYSTEM_DARWIN)
 typedef darwin_tag current_tag;
+#elif defined(BACKWARD_SYSTEM_WINDOWS)
+typedef windows_tag current_tag;
 #elif defined(BACKWARD_SYSTEM_UNKNOWN)
 typedef unknown_tag current_tag;
 #else
@@ -391,6 +442,13 @@ struct backtrace_symbol;
 
 #if BACKWARD_HAS_BACKTRACE_SYMBOL == 1
 typedef backtrace_symbol current;
+#else
+#error "You shall not pass, until you know what you want."
+#endif
+#elif defined(BACKWARD_SYSTEM_WINDOWS)
+struct pdb_symbol;
+#if BACKWARD_HAS_PDB_SYMBOL == 1
+typedef pdb_symbol current;
 #else
 #error "You shall not pass, until you know what you want."
 #endif
@@ -710,9 +768,8 @@ template <typename F> size_t unwind(F f, size_t depth) {
 template <>
 class StackTraceImpl<system_tag::current_tag> : public StackTraceImplHolder {
 public:
-  __attribute__((noinline)) // TODO use some macro
-  size_t
-  load_here(size_t depth = 32) {
+  NOINLINE
+  size_t load_here(size_t depth = 32) {
     load_thread_info();
     if (depth == 0) {
       return 0;
@@ -746,14 +803,13 @@ private:
   };
 };
 
-#else // BACKWARD_HAS_UNWIND == 0
+#elif defined(BACKWARD_HAS_BACKTRACE)
 
 template <>
 class StackTraceImpl<system_tag::current_tag> : public StackTraceImplHolder {
 public:
-  __attribute__((noinline)) // TODO use some macro
-  size_t
-  load_here(size_t depth = 32) {
+  NOINLINE
+  size_t load_here(size_t depth = 32) {
     load_thread_info();
     if (depth == 0) {
       return 0;
@@ -781,7 +837,102 @@ public:
   }
 };
 
-#endif // BACKWARD_HAS_UNWIND
+#elif defined(BACKWARD_SYSTEM_WINDOWS)
+
+template <>
+class StackTraceImpl<system_tag::current_tag> : public StackTraceImplHolder {
+public:
+  // We have to load the machine type from the image info
+  // So we first initialize the resolver, and it tells us this info
+  void set_machine_type(DWORD machine_type) { machine_type_ = machine_type; }
+  void set_context(CONTEXT *ctx) { ctx_ = ctx; }
+  void set_thread_handle(HANDLE handle) { thd_ = handle; }
+
+  NOINLINE
+  size_t load_here(size_t depth = 32) {
+
+    CONTEXT localCtx; // used when no context is provided
+
+    if (depth == 0) {
+      return 0;
+    }
+
+    if (!ctx_) {
+      ctx_ = &localCtx;
+      RtlCaptureContext(ctx_);
+    }
+
+    if (!thd_) {
+      thd_ = GetCurrentThread();
+    }
+
+    HANDLE process = GetCurrentProcess();
+
+    STACKFRAME64 s;
+    memset(&s, 0, sizeof(STACKFRAME64));
+
+    // TODO: 32 bit context capture
+    s.AddrStack.Mode = AddrModeFlat;
+    s.AddrFrame.Mode = AddrModeFlat;
+    s.AddrPC.Mode = AddrModeFlat;
+#ifdef _M_X64
+    s.AddrPC.Offset = ctx_->Rip;
+    s.AddrStack.Offset = ctx_->Rsp;
+    s.AddrFrame.Offset = ctx_->Rbp;
+#else
+    s.AddrPC.Offset = ctx_->Eip;
+    s.AddrStack.Offset = ctx_->Esp;
+    s.AddrFrame.Offset = ctx_->Ebp;
+#endif
+
+    if (!machine_type_) {
+#ifdef _M_X64
+      machine_type_ = IMAGE_FILE_MACHINE_AMD64;
+#else
+      machine_type_ = IMAGE_FILE_MACHINE_I386;
+#endif
+    }
+
+    for (;;) {
+      // NOTE: this only works if PDBs are already loaded!
+      SetLastError(0);
+      if (!StackWalk64(machine_type_, process, thd_, &s, ctx_, NULL,
+                       SymFunctionTableAccess64, SymGetModuleBase64, NULL))
+        break;
+
+      if (s.AddrReturn.Offset == 0)
+        break;
+
+      _stacktrace.push_back(reinterpret_cast<void *>(s.AddrPC.Offset));
+
+      if (size() >= depth)
+        break;
+    }
+
+    return size();
+  }
+
+  size_t load_from(void *addr, size_t depth = 32) {
+    load_here(depth + 8);
+
+    for (size_t i = 0; i < _stacktrace.size(); ++i) {
+      if (_stacktrace[i] == addr) {
+        skip_n_firsts(i);
+        break;
+      }
+    }
+
+    _stacktrace.resize(std::min(_stacktrace.size(), skip_n_firsts() + depth));
+    return size();
+  }
+
+private:
+  DWORD machine_type_ = 0;
+  HANDLE thd_ = 0;
+  CONTEXT *ctx_ = nullptr;
+};
+
+#endif
 
 class StackTrace : public StackTraceImpl<system_tag::current_tag> {};
 
@@ -3068,6 +3219,132 @@ class TraceResolverImpl<system_tag::darwin_tag>
 
 #endif // BACKWARD_SYSTEM_DARWIN
 
+#ifdef BACKWARD_SYSTEM_WINDOWS
+
+// Load all symbol info
+// Based on:
+// https://stackoverflow.com/questions/6205981/windows-c-stack-trace-from-a-running-app/28276227#28276227
+
+struct module_data {
+  std::string image_name;
+  std::string module_name;
+  void *base_address;
+  DWORD load_size;
+};
+
+class get_mod_info {
+  HANDLE process;
+  static const int buffer_length = 4096;
+
+public:
+  get_mod_info(HANDLE h) : process(h) {}
+
+  module_data operator()(HMODULE module) {
+    module_data ret;
+    char temp[buffer_length];
+    MODULEINFO mi;
+
+    GetModuleInformation(process, module, &mi, sizeof(mi));
+    ret.base_address = mi.lpBaseOfDll;
+    ret.load_size = mi.SizeOfImage;
+
+    GetModuleFileNameEx(process, module, temp, sizeof(temp));
+    ret.image_name = temp;
+    GetModuleBaseName(process, module, temp, sizeof(temp));
+    ret.module_name = temp;
+    std::vector<char> img(ret.image_name.begin(), ret.image_name.end());
+    std::vector<char> mod(ret.module_name.begin(), ret.module_name.end());
+    SymLoadModule64(process, 0, &img[0], &mod[0], (DWORD64)ret.base_address,
+                    ret.load_size);
+    return ret;
+  }
+};
+
+template <> class TraceResolverImpl<system_tag::windows_tag> {
+public:
+  TraceResolverImpl() {
+
+    HANDLE process = GetCurrentProcess();
+
+    std::vector<module_data> modules;
+    DWORD cbNeeded;
+    std::vector<HMODULE> module_handles(1);
+    SymInitialize(process, NULL, false);
+    DWORD symOptions = SymGetOptions();
+    symOptions |= SYMOPT_LOAD_LINES | SYMOPT_UNDNAME;
+    SymSetOptions(symOptions);
+    EnumProcessModules(process, &module_handles[0],
+                       module_handles.size() * sizeof(HMODULE), &cbNeeded);
+    module_handles.resize(cbNeeded / sizeof(HMODULE));
+    EnumProcessModules(process, &module_handles[0],
+                       module_handles.size() * sizeof(HMODULE), &cbNeeded);
+    std::transform(module_handles.begin(), module_handles.end(),
+                   std::back_inserter(modules), get_mod_info(process));
+    void *base = modules[0].base_address;
+    IMAGE_NT_HEADERS *h = ImageNtHeader(base);
+    image_type = h->FileHeader.Machine;
+  }
+
+  template <class ST> void load_stacktrace(ST &) {}
+
+  static const int max_sym_len = 255;
+  struct symbol_t {
+    SYMBOL_INFO sym;
+    char buffer[max_sym_len];
+  } sym;
+
+  DWORD64 displacement;
+
+  ResolvedTrace resolve(ResolvedTrace t) {
+    HANDLE process = GetCurrentProcess();
+
+    char name[256];
+
+    memset(&sym, sizeof(sym), 0);
+    sym.sym.SizeOfStruct = sizeof(SYMBOL_INFO);
+    sym.sym.MaxNameLen = max_sym_len;
+
+    if (!SymFromAddr(process, (ULONG64)t.addr, &displacement, &sym.sym)) {
+      // TODO:  error handling everywhere
+      LPTSTR lpMsgBuf;
+      DWORD dw = GetLastError();
+
+      FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                        FORMAT_MESSAGE_FROM_SYSTEM |
+                        FORMAT_MESSAGE_IGNORE_INSERTS,
+                    NULL, dw, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                    (LPTSTR)&lpMsgBuf, 0, NULL);
+
+      printf(lpMsgBuf);
+
+      // abort();
+    }
+    UnDecorateSymbolName(sym.sym.Name, (PSTR)name, 256, UNDNAME_COMPLETE);
+
+    DWORD offset = 0;
+    IMAGEHLP_LINE line;
+    if (SymGetLineFromAddr(process, (ULONG64)t.addr, &offset, &line)) {
+      t.object_filename = line.FileName;
+      t.source.filename = line.FileName;
+      t.source.line = line.LineNumber;
+      t.source.col = offset;
+    }
+
+    t.source.function = name;
+    t.object_filename = "";
+    t.object_function = name;
+
+    return t;
+  }
+
+  DWORD machine_type() const { return image_type; }
+
+private:
+  DWORD image_type;
+};
+
+#endif
+
 class TraceResolver : public TraceResolverImpl<system_tag::current_tag> {};
 
 /*************** CODE SNIPPET ***************/
@@ -3379,6 +3656,8 @@ public:
     return os;
   }
 
+  TraceResolver const &resolver() const { return _resolver; }
+
 private:
   TraceResolver _resolver;
   SnippetFactory _snippets;
@@ -3622,6 +3901,179 @@ private:
 };
 
 #endif // BACKWARD_SYSTEM_LINUX || BACKWARD_SYSTEM_DARWIN
+
+#ifdef BACKWARD_SYSTEM_WINDOWS
+
+class SignalHandling {
+public:
+  SignalHandling(const std::vector<int> & = std::vector<int>())
+      : reporter_thread_([]() {
+          /* We handle crashes in a utility thread:
+            backward structures and some Windows functions called here
+            need stack space, which we do not have when we encounter a
+            stack overflow.
+            To support reporting stack traces during a stack overflow,
+            we create a utility thread at startup, which waits until a
+            crash happens or the program exits normally. */
+
+          {
+            std::unique_lock<std::mutex> lk(mtx());
+            cv().wait(lk, [] { return crashed() != crash_status::running; });
+          }
+          if (crashed() == crash_status::crashed) {
+            handle_stacktrace(skip_recs());
+          }
+          {
+            std::unique_lock<std::mutex> lk(mtx());
+            crashed() = crash_status::ending;
+          }
+          cv().notify_one();
+        }) {
+    SetUnhandledExceptionFilter(crash_handler);
+
+    signal(SIGABRT, signal_handler);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+
+    set_terminate(&terminator);
+    set_unexpected(&terminator);
+    _set_purecall_handler(&terminator);
+    _set_invalid_parameter_handler(&invalid_parameter_handler);
+  }
+  bool loaded() const { return true; }
+
+  ~SignalHandling() {
+    {
+      std::unique_lock<std::mutex> lk(mtx());
+      crashed() = crash_status::normal_exit;
+    }
+
+    cv().notify_one();
+
+    reporter_thread_.join();
+  }
+
+private:
+  static CONTEXT *ctx() {
+    static CONTEXT data;
+    return &data;
+  }
+
+  enum class crash_status { running, crashed, normal_exit, ending };
+
+  static crash_status &crashed() {
+    static crash_status data;
+    return data;
+  }
+
+  static std::mutex &mtx() {
+    static std::mutex data;
+    return data;
+  }
+
+  static std::condition_variable &cv() {
+    static std::condition_variable data;
+    return data;
+  }
+
+  static HANDLE &thread_handle() {
+    static HANDLE handle;
+    return handle;
+  }
+
+  std::thread reporter_thread_;
+
+  // TODO: how not to hardcode these?
+  static const constexpr int signal_skip_recs =
+#ifdef __clang__
+      // With clang, RtlCaptureContext also captures the stack frame of the
+      // current function Below that, there ar 3 internal Windows functions
+      4
+#else
+      // With MSVC cl, RtlCaptureContext misses the stack frame of the current
+      // function The first entries during StackWalk are the 3 internal Windows
+      // functions
+      3
+#endif
+      ;
+
+  static int &skip_recs() {
+    static int data;
+    return data;
+  }
+
+  static inline void terminator() {
+    crash_handler(signal_skip_recs);
+    abort();
+  }
+
+  static inline void signal_handler(int) {
+    crash_handler(signal_skip_recs);
+    abort();
+  }
+
+  static inline void __cdecl invalid_parameter_handler(const wchar_t *,
+                                                       const wchar_t *,
+                                                       const wchar_t *,
+                                                       unsigned int,
+                                                       uintptr_t) {
+    crash_handler(signal_skip_recs);
+    abort();
+  }
+
+  NOINLINE static LONG WINAPI crash_handler(EXCEPTION_POINTERS *info) {
+    // The exception info supplies a trace from exactly where the issue was,
+    // no need to skip records
+    crash_handler(0, info->ContextRecord);
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+
+  NOINLINE static void crash_handler(int skip, CONTEXT *ct = nullptr) {
+
+    if (ct == nullptr) {
+      RtlCaptureContext(ctx());
+    } else {
+      memcpy(ctx(), ct, sizeof(CONTEXT));
+    }
+    DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
+                    GetCurrentProcess(), &thread_handle(), 0, FALSE,
+                    DUPLICATE_SAME_ACCESS);
+
+    skip_recs() = skip;
+
+    {
+      std::unique_lock<std::mutex> lk(mtx());
+      crashed() = crash_status::crashed;
+    }
+
+    cv().notify_one();
+
+    {
+      std::unique_lock<std::mutex> lk(mtx());
+      cv().wait(lk, [] { return crashed() != crash_status::crashed; });
+    }
+  }
+
+  static void handle_stacktrace(int skip_frames = 0) {
+    // printer creates the TraceResolver, which can supply us a machine type
+    // for stack walking. Without this, StackTrace can only guess using some
+    // macros.
+    // StackTrace also requires that the PDBs are already loaded, which is done
+    // in the constructor of TraceResolver
+    Printer printer;
+
+    StackTrace st;
+    st.set_machine_type(printer.resolver().machine_type());
+    st.set_context(ctx());
+    st.set_thread_handle(thread_handle());
+    st.load_here(32 + skip_frames);
+    st.skip_n_firsts(skip_frames);
+
+    printer.address = true;
+    printer.print(st, std::cerr);
+  }
+};
+
+#endif // BACKWARD_SYSTEM_WINDOWS
 
 #ifdef BACKWARD_SYSTEM_UNKNOWN
 

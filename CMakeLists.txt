@@ -94,15 +94,15 @@ target_include_directories(backward PUBLIC ${BACKWARD_INCLUDE_DIRS})
 if(BACKWARD_TESTS)
 	enable_testing()
 
-	add_library(test_main SHARED test/_test_main.cpp)
+	add_library(test_main OBJECT test/_test_main.cpp)
 
 	macro(backward_add_test src)
 		get_filename_component(name ${src} NAME_WE)
 		set(test_name "test_${name}")
 
-		add_executable(${test_name} ${src} ${ARGN})
+		add_executable(${test_name} ${src} ${ARGN} $<TARGET_OBJECTS:test_main>)
 
-		target_link_libraries(${test_name} PRIVATE Backward::Backward test_main)
+		target_link_libraries(${test_name} PRIVATE Backward::Backward)
 
 		add_test(NAME ${name} COMMAND ${test_name})
 	endmacro()

@@ -25,7 +25,10 @@
 
 #include "test/test.hpp"
 #include <cstdio>
+
+#ifndef _WIN32
 #include <sys/resource.h>
+#endif
 
 using namespace backward;
 
@@ -75,9 +78,11 @@ TEST_DIVZERO(divide_by_zero) {
 int bye_bye_stack(int i) { return bye_bye_stack(i + 1) + bye_bye_stack(i * 2); }
 
 TEST_SEGFAULT(stackoverflow) {
+#ifndef _WIN32
   struct rlimit limit;
   limit.rlim_max = 8096;
   setrlimit(RLIMIT_STACK, &limit);
+#endif
   int r = bye_bye_stack(42);
   std::cout << "r=" << r << std::endl;
 }
