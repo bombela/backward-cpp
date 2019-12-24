@@ -397,6 +397,12 @@ template <typename T> T &move(T &v) { return v; }
 } // namespace backward
 #endif // BACKWARD_ATLEAST_CXX11
 
+#if defined(BACKWARD_SYSTEM_WINDOWS)
+#define BACKWARD_PATH_DELIMITER ";"
+#else
+#define BACKWARD_PATH_DELIMITER ":"
+#endif
+
 namespace backward {
 
 namespace system_tag {
@@ -580,6 +586,27 @@ private:
 #endif // BACKWARD_SYSTEM_LINUX || BACKWARD_SYSTEM_DARWIN
 
 struct demangler : public demangler_impl<system_tag::current_tag> {};
+
+// Split a string on a delimiter.  If delimiter == ":" then:
+//   ""              --> []
+//   ":"             --> ["",""]
+//   "::"            --> ["","",""]
+//   "/a/b/c"        --> ["/a/b/c"]
+//   "/a/b/c:/d/e/f" --> ["/a/b/c","/d/e/f"]
+//   etc.
+inline void split_string(const std::string &s,
+                         const std::string delimiter,
+                         std::vector<std::string>* out) {
+  size_t last = 0;
+  size_t next = 0;
+  while ((next = s.find(delimiter, last)) != std::string::npos) {
+    out->push_back(s.substr(last, next-last));
+    last = next + delimiter.size();
+  }
+  if (last <= s.length()) {
+    out->push_back(s.substr(last));
+  }
+}
 
 } // namespace details
 
@@ -3354,8 +3381,28 @@ public:
   typedef std::vector<std::pair<unsigned, std::string>> lines_t;
 
   SourceFile() {}
-  SourceFile(const std::string &path)
-      : _file(new std::ifstream(path.c_str())) {}
+  SourceFile(const std::string &path) {
+    // 1. If BACKWARD_CXX_SOURCE_PREFIXES is set then assume it contains
+    //    a colon-separated list of path prefixes.  Try prepending each
+    //    to the given path until a valid file is found.
+    const char* prefixes_str = std::getenv("BACKWARD_CXX_SOURCE_PREFIXES");
+    if (prefixes_str && !std::string(prefixes_str).empty()) {
+      std::vector<std::string> prefixes;
+      details::split_string(std::string(prefixes_str),
+                            std::string(BACKWARD_PATH_DELIMITER),
+                            &prefixes);
+      for (size_t i = 0; i < prefixes.size(); ++i) {
+        // Double slashes (//) should not be a problem.
+        std::string new_path = prefixes[i] + '/' + path;
+        _file.reset(new std::ifstream(new_path.c_str()));
+        if (is_open()) break;
+      }
+    }
+    // 2. If no valid file found then fallback to opening the path as-is.
+    if (!_file || !is_open()) {
+      _file.reset(new std::ifstream(path.c_str()));
+    }
+  }
   bool is_open() const { return _file->is_open(); }
 
   lines_t &get_lines(unsigned line_start, unsigned line_count, lines_t &lines) {
