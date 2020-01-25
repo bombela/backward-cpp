@@ -517,6 +517,12 @@ public:
     handle tmp(new_val);
     swap(tmp);
   }
+
+  void update(T new_val) {
+    _val = new_val;
+    _empty = static_cast<bool>(new_val);
+  }
+
   operator const dummy *() const {
     if (_empty) {
       return nullptr;
@@ -563,10 +569,10 @@ template <> struct demangler_impl<system_tag::current_tag> {
 
   std::string demangle(const char *funcname) {
     using namespace details;
-    char *result = abi::__cxa_demangle(funcname, _demangle_buffer.release(),
+    char *result = abi::__cxa_demangle(funcname, _demangle_buffer.get(),
                                        &_demangle_buffer_length, nullptr);
     if (result) {
-      _demangle_buffer.reset(result);
+      _demangle_buffer.update(result);
       return result;
     }
     return funcname;
