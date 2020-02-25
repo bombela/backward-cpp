@@ -1015,6 +1015,12 @@ public:
       // variable; In that case, we actually open /proc/self/exe, which
       // is always the actual executable (even if it was deleted/replaced!)
       // but display the path that /proc/self/exe links to.
+      // However, this right away reduces probability of successful symbol
+      // resolution, because libbfd may try to find *.debug files in the
+      // same dir, in case symbols are stripped. As a result, it may try
+      // to find a file /proc/self/<exe_name>.debug, which obviously does
+      // not exist. /proc/self/exe is a last resort. First load attempt
+      // should go for the original executable file path.
       symbol_info.dli_fname = "/proc/self/exe";
       return exec_path_;
     } else {
@@ -1140,9 +1146,45 @@ public:
     }
 
     trace.object_filename = resolve_exec_path(symbol_info);
-    bfd_fileobject *fobj = load_object_with_bfd(symbol_info.dli_fname);
-    if (!fobj->handle) {
-      return trace; // sad, we couldn't load the object :(
+    bfd_fileobject *fobj;
+    // Before rushing to resolution need to ensure the executable
+    // file still can be used. For that compare inode numbers of
+    // what is stored by the executable's file path, and in the
+    // dli_fname, which not necessarily equals to the executable.
+    // It can be a shared library, or /proc/self/exe, and in the
+    // latter case has drawbacks. See the exec path resolution for
+    // details. In short - the dli object should be used only as
+    // the last resort.
+    // If inode numbers are equal, it is known dli_fname and the
+    // executable file are the same. This is guaranteed by Linux,
+    // because if the executable file is changed/deleted, it will
+    // be done in a new inode. The old file will be preserved in
+    // /proc/self/exe, and may even have inode 0. The latter can
+    // happen if the inode was actually reused, and the file was
+    // kept only in the main memory.
+    //
+    struct stat obj_stat;
+    struct stat dli_stat;
+    if (stat(trace.object_filename.c_str(), &obj_stat) == 0 &&
+        stat(symbol_info.dli_fname, &dli_stat) == 0 &&
+        obj_stat.st_ino == dli_stat.st_ino) {
+      // The executable file, and the shared object containing the
+      // address are the same file. Safe to use the original path.
+      // this is preferable. Libbfd will search for stripped debug
+      // symbols in the same directory.
+      fobj = load_object_with_bfd(trace.object_filename);
+    } else{
+      // The original object file was *deleted*! The only hope is
+      // that the debug symbols are either inside the shared
+      // object file, or are in the same directory, and this is
+      // not /proc/self/exe.
+      fobj = nullptr;
+    }
+    if (fobj == nullptr || !fobj->handle) {
+      fobj = load_object_with_bfd(symbol_info.dli_fname);
+      if (!fobj->handle) {
+        return trace;
+      }
     }
 
     find_sym_result *details_selected; // to be filled.
