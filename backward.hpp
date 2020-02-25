@@ -1140,8 +1140,8 @@ public:
     }
 
     trace.object_filename = resolve_exec_path(symbol_info);
-    bfd_fileobject &fobj = load_object_with_bfd(symbol_info.dli_fname);
-    if (!fobj.handle) {
+    bfd_fileobject *fobj = load_object_with_bfd(symbol_info.dli_fname);
+    if (!fobj->handle) {
       return trace; // sad, we couldn't load the object :(
     }
 
@@ -1277,7 +1277,7 @@ private:
   typedef details::hashtable<std::string, bfd_fileobject>::type fobj_bfd_map_t;
   fobj_bfd_map_t _fobj_bfd_map;
 
-  bfd_fileobject &load_object_with_bfd(const std::string &filename_object) {
+  bfd_fileobject *load_object_with_bfd(const std::string &filename_object) {
     using namespace details;
 
     if (!_bfd_loaded) {
@@ -1288,11 +1288,11 @@ private:
 
     fobj_bfd_map_t::iterator it = _fobj_bfd_map.find(filename_object);
     if (it != _fobj_bfd_map.end()) {
-      return it->second;
+      return &it->second;
     }
 
     // this new object is empty for now.
-    bfd_fileobject &r = _fobj_bfd_map[filename_object];
+    bfd_fileobject *r = &_fobj_bfd_map[filename_object];
 
     // we do the work temporary in this one;
     bfd_handle_t bfd_handle;
@@ -1341,9 +1341,9 @@ private:
       return r; // damned, that's a stripped file that you got there!
     }
 
-    r.handle = move(bfd_handle);
-    r.symtab = move(symtab);
-    r.dynamic_symtab = move(dynamic_symtab);
+    r->handle = move(bfd_handle);
+    r->symtab = move(symtab);
+    r->dynamic_symtab = move(dynamic_symtab);
     return r;
   }
 
@@ -1362,15 +1362,15 @@ private:
     find_sym_result result;
   };
 
-  find_sym_result find_symbol_details(bfd_fileobject &fobj, void *addr,
+  find_sym_result find_symbol_details(bfd_fileobject *fobj, void *addr,
                                       void *base_addr) {
     find_sym_context context;
     context.self = this;
-    context.fobj = &fobj;
+    context.fobj = fobj;
     context.addr = addr;
     context.base_addr = base_addr;
     context.result.found = false;
-    bfd_map_over_sections(fobj.handle.get(), &find_in_section_trampoline,
+    bfd_map_over_sections(fobj->handle.get(), &find_in_section_trampoline,
                           static_cast<void *>(&context));
     return context.result;
   }
@@ -1379,24 +1379,24 @@ private:
     find_sym_context *context = static_cast<find_sym_context *>(data);
     context->self->find_in_section(
         reinterpret_cast<bfd_vma>(context->addr),
-        reinterpret_cast<bfd_vma>(context->base_addr), *context->fobj, section,
+        reinterpret_cast<bfd_vma>(context->base_addr), context->fobj, section,
         context->result);
   }
 
-  void find_in_section(bfd_vma addr, bfd_vma base_addr, bfd_fileobject &fobj,
+  void find_in_section(bfd_vma addr, bfd_vma base_addr, bfd_fileobject *fobj,
                        asection *section, find_sym_result &result) {
     if (result.found)
       return;
 
 #ifdef bfd_get_section_flags
-    if ((bfd_get_section_flags(fobj.handle.get(), section) & SEC_ALLOC) == 0)
+    if ((bfd_get_section_flags(fobj->handle.get(), section) & SEC_ALLOC) == 0)
 #else
     if ((bfd_section_flags(section) & SEC_ALLOC) == 0)
 #endif
       return; // a debug section is never loaded automatically.
 
 #ifdef bfd_get_section_vma
-    bfd_vma sec_addr = bfd_get_section_vma(fobj.handle.get(), section);
+    bfd_vma sec_addr = bfd_get_section_vma(fobj->handle.get(), section);
 #else
     bfd_vma sec_addr = bfd_section_vma(section);
 #endif
@@ -1418,15 +1418,15 @@ private:
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
 #endif
-    if (!result.found && fobj.symtab) {
+    if (!result.found && fobj->symtab) {
       result.found = bfd_find_nearest_line(
-          fobj.handle.get(), section, fobj.symtab.get(), addr - sec_addr,
+          fobj->handle.get(), section, fobj->symtab.get(), addr - sec_addr,
           &result.filename, &result.funcname, &result.line);
     }
 
-    if (!result.found && fobj.dynamic_symtab) {
+    if (!result.found && fobj->dynamic_symtab) {
       result.found = bfd_find_nearest_line(
-          fobj.handle.get(), section, fobj.dynamic_symtab.get(),
+          fobj->handle.get(), section, fobj->dynamic_symtab.get(),
           addr - sec_addr, &result.filename, &result.funcname, &result.line);
     }
 #if defined(__clang__)
@@ -1435,13 +1435,13 @@ private:
   }
 
   ResolvedTrace::source_locs_t
-  backtrace_inliners(bfd_fileobject &fobj, find_sym_result previous_result) {
+  backtrace_inliners(bfd_fileobject *fobj, find_sym_result previous_result) {
     // This function can be called ONLY after a SUCCESSFUL call to
     // find_symbol_details. The state is global to the bfd_handle.
     ResolvedTrace::source_locs_t results;
     while (previous_result.found) {
       find_sym_result result;
-      result.found = bfd_find_inliner_info(fobj.handle.get(), &result.filename,
+      result.found = bfd_find_inliner_info(fobj->handle.get(), &result.filename,
                                            &result.funcname, &result.line);
 
       if (result
