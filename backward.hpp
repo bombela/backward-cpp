@@ -944,19 +944,16 @@ class StackTrace : public StackTraceImpl<system_tag::current_tag> {};
 
 /*************** TRACE RESOLVER ***************/
 
-template <typename TAG> class TraceResolverImpl;
-
-#ifdef BACKWARD_SYSTEM_UNKNOWN
-
-template <> class TraceResolverImpl<system_tag::unknown_tag> {
-public:
-  template <class ST> void load_stacktrace(ST &) {}
-  ResolvedTrace resolve(ResolvedTrace t) { return t; }
-};
-
-#endif
-
 class TraceResolverImplBase {
+public:
+  virtual void load_addresses(void *const*addresses, int address_count) {}
+
+  template <class ST> void load_stacktrace(ST &st) {
+    load_addresses(st.begin(), (int)st.size());
+  }
+
+  virtual ResolvedTrace resolve(ResolvedTrace t) { return t; }
+
 protected:
   std::string demangle(const char *funcname) {
     return _demangler.demangle(funcname);
@@ -965,6 +962,15 @@ protected:
 private:
   details::demangler _demangler;
 };
+
+template <typename TAG> class TraceResolverImpl;
+
+#ifdef BACKWARD_SYSTEM_UNKNOWN
+
+template <> class TraceResolverImpl<system_tag::unknown_tag>
+    : public TraceResolverImplBase {};
+
+#endif
 
 #ifdef BACKWARD_SYSTEM_LINUX
 
@@ -1029,15 +1035,14 @@ template <>
 class TraceResolverLinuxImpl<trace_resolver_tag::backtrace_symbol>
     : public TraceResolverLinuxBase {
 public:
-  template <class ST> void load_stacktrace(ST &st) {
-    using namespace details;
-    if (st.size() == 0) {
+  void load_addresses(void *const*addresses, int address_count) override {
+    if (address_count == 0) {
       return;
     }
-    _symbols.reset(backtrace_symbols(st.begin(), (int)st.size()));
+    _symbols.reset(backtrace_symbols(addresses, address_count));
   }
 
-  ResolvedTrace resolve(ResolvedTrace trace) {
+  ResolvedTrace resolve(ResolvedTrace trace) override {
     char *filename = _symbols[trace.idx];
     char *funcname = filename;
     while (*funcname && *funcname != '(') {
@@ -1074,9 +1079,7 @@ class TraceResolverLinuxImpl<trace_resolver_tag::libbfd>
 public:
   TraceResolverLinuxImpl() : _bfd_loaded(false) {}
 
-  template <class ST> void load_stacktrace(ST &) {}
-
-  ResolvedTrace resolve(ResolvedTrace trace) {
+  ResolvedTrace resolve(ResolvedTrace trace) override {
     Dl_info symbol_info;
 
     // trace.addr is a virtual address in memory pointing to some code.
@@ -1438,9 +1441,7 @@ class TraceResolverLinuxImpl<trace_resolver_tag::libdw>
 public:
   TraceResolverLinuxImpl() : _dwfl_handle_initialized(false) {}
 
-  template <class ST> void load_stacktrace(ST &) {}
-
-  ResolvedTrace resolve(ResolvedTrace trace) {
+  ResolvedTrace resolve(ResolvedTrace trace) override {
     using namespace details;
 
     Dwarf_Addr trace_addr = (Dwarf_Addr)trace.addr;
@@ -1767,9 +1768,7 @@ class TraceResolverLinuxImpl<trace_resolver_tag::libdwarf>
 public:
   TraceResolverLinuxImpl() : _dwarf_loaded(false) {}
 
-  template <class ST> void load_stacktrace(ST &) {}
-
-  ResolvedTrace resolve(ResolvedTrace trace) {
+  ResolvedTrace resolve(ResolvedTrace trace) override {
     // trace.addr is a virtual address in memory pointing to some code.
     // Let's try to find from which loaded object it comes from.
     // The loaded object can be yourself btw.
@@ -3148,15 +3147,14 @@ template <>
 class TraceResolverDarwinImpl<trace_resolver_tag::backtrace_symbol>
     : public TraceResolverImplBase {
 public:
-  template <class ST> void load_stacktrace(ST &st) {
-    using namespace details;
-    if (st.size() == 0) {
+  void load_addresses(void *const*addresses, int address_count) override {
+    if (address_count == 0) {
       return;
     }
-    _symbols.reset(backtrace_symbols(st.begin(), st.size()));
+    _symbols.reset(backtrace_symbols(addresses, address_count));
   }
 
-  ResolvedTrace resolve(ResolvedTrace trace) {
+  ResolvedTrace resolve(ResolvedTrace trace) override {
     // parse:
     // <n>  <file>  <addr>  <mangled-name> + <offset>
     char *filename = _symbols[trace.idx];
@@ -3291,8 +3289,6 @@ public:
     image_type = h->FileHeader.Machine;
   }
 
-  template <class ST> void load_stacktrace(ST &) {}
-
   static const int max_sym_len = 255;
   struct symbol_t {
     SYMBOL_INFO sym;
@@ -3301,7 +3297,7 @@ public:
 
   DWORD64 displacement;
 
-  ResolvedTrace resolve(ResolvedTrace t) {
+  ResolvedTrace resolve(ResolvedTrace t) override {
     HANDLE process = GetCurrentProcess();
 
     char name[256];
