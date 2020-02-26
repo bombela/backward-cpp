@@ -593,25 +593,27 @@ private:
 
 struct demangler : public demangler_impl<system_tag::current_tag> {};
 
-// Split a string on a delimiter.  If delimiter == ":" then:
+// Split a string on the platform's PATH delimiter.  Example: if delimiter
+// is ":" then:
 //   ""              --> []
 //   ":"             --> ["",""]
 //   "::"            --> ["","",""]
 //   "/a/b/c"        --> ["/a/b/c"]
 //   "/a/b/c:/d/e/f" --> ["/a/b/c","/d/e/f"]
 //   etc.
-inline void split_string(const std::string &s,
-                         const std::string delimiter,
-                         std::vector<std::string>* out) {
+inline std::vector<std::string> split_source_prefixes(const std::string &s) {
+  std::vector<std::string> out;
+  std::string delimiter = BACKWARD_PATH_DELIMITER;
   size_t last = 0;
   size_t next = 0;
   while ((next = s.find(delimiter, last)) != std::string::npos) {
-    out->push_back(s.substr(last, next-last));
+    out.push_back(s.substr(last, next-last));
     last = next + delimiter.size();
   }
   if (last <= s.length()) {
-    out->push_back(s.substr(last));
+    out.push_back(s.substr(last));
   }
+  return out;
 }
 
 } // namespace details
@@ -3391,18 +3393,12 @@ public:
     // 1. If BACKWARD_CXX_SOURCE_PREFIXES is set then assume it contains
     //    a colon-separated list of path prefixes.  Try prepending each
     //    to the given path until a valid file is found.
-    const char* prefixes_str = std::getenv("BACKWARD_CXX_SOURCE_PREFIXES");
-    if (prefixes_str && !std::string(prefixes_str).empty()) {
-      std::vector<std::string> prefixes;
-      details::split_string(std::string(prefixes_str),
-                            std::string(BACKWARD_PATH_DELIMITER),
-                            &prefixes);
-      for (size_t i = 0; i < prefixes.size(); ++i) {
-        // Double slashes (//) should not be a problem.
-        std::string new_path = prefixes[i] + '/' + path;
-        _file.reset(new std::ifstream(new_path.c_str()));
-        if (is_open()) break;
-      }
+    const std::vector<std::string>& prefixes = get_paths_from_env_variable();
+    for (size_t i = 0; i < prefixes.size(); ++i) {
+      // Double slashes (//) should not be a problem.
+      std::string new_path = prefixes[i] + '/' + path;
+      _file.reset(new std::ifstream(new_path.c_str()));
+      if (is_open()) break;
     }
     // 2. If no valid file found then fallback to opening the path as-is.
     if (!_file || !is_open()) {
@@ -3503,6 +3499,20 @@ public:
 private:
   details::handle<std::ifstream *, details::default_delete<std::ifstream *>>
       _file;
+
+  std::vector<std::string> get_paths_from_env_variable_impl() {
+    std::vector<std::string> paths;
+    const char* prefixes_str = std::getenv("BACKWARD_CXX_SOURCE_PREFIXES");
+    if (prefixes_str && prefixes_str[0]) {
+      paths = details::split_source_prefixes(prefixes_str);
+    }
+    return paths;
+  }
+
+  const std::vector<std::string>& get_paths_from_env_variable() {
+    static std::vector<std::string> paths = get_paths_from_env_variable_impl();
+    return paths;
+  }
 
 #ifdef BACKWARD_ATLEAST_CXX11
   SourceFile(const SourceFile &) = delete;
