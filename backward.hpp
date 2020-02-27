@@ -398,9 +398,9 @@ template <typename T> T &move(T &v) { return v; }
 #endif // BACKWARD_ATLEAST_CXX11
 
 #if defined(BACKWARD_SYSTEM_WINDOWS)
-#define BACKWARD_PATH_DELIMITER ";"
+const char kBackwardPathDelimiter[] = ";";
 #else
-#define BACKWARD_PATH_DELIMITER ":"
+const char kBackwardPathDelimiter[] = ":";
 #endif
 
 namespace backward {
@@ -603,12 +603,12 @@ struct demangler : public demangler_impl<system_tag::current_tag> {};
 //   etc.
 inline std::vector<std::string> split_source_prefixes(const std::string &s) {
   std::vector<std::string> out;
-  std::string delimiter = BACKWARD_PATH_DELIMITER;
   size_t last = 0;
   size_t next = 0;
-  while ((next = s.find(delimiter, last)) != std::string::npos) {
+  size_t delimiter_size = sizeof(kBackwardPathDelimiter)-1;
+  while ((next = s.find(kBackwardPathDelimiter, last)) != std::string::npos) {
     out.push_back(s.substr(last, next-last));
-    last = next + delimiter.size();
+    last = next + delimiter_size;
   }
   if (last <= s.length()) {
     out.push_back(s.substr(last));
