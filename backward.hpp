@@ -397,11 +397,15 @@ template <typename T> T &move(T &v) { return v; }
 } // namespace backward
 #endif // BACKWARD_ATLEAST_CXX11
 
+namespace backward {
+namespace details {
 #if defined(BACKWARD_SYSTEM_WINDOWS)
 const char kBackwardPathDelimiter[] = ";";
 #else
 const char kBackwardPathDelimiter[] = ":";
 #endif
+} // namespace details
+} // namespace backward
 
 namespace backward {
 
