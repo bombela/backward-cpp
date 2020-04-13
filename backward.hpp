@@ -1028,7 +1028,8 @@ private:
 
   static std::string get_argv0() {
     std::string argv0;
-    std::getline(std::ifstream("/proc/self/cmdline"), argv0, '\0');
+    std::ifstream ifs("/proc/self/cmdline");
+    std::getline(ifs, argv0, '\0');
     return argv0;
   }
 
