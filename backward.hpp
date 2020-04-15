@@ -481,7 +481,7 @@ template <typename T> struct default_delete {
   void operator()(T &ptr) const { delete ptr; }
 };
 
-template <typename T, typename Deleter = deleter<void, void *, &::free>>
+template <typename T, typename Deleter = deleter<void, void *, &::free> >
 class handle {
   struct dummy;
   T _val;
@@ -1262,7 +1262,7 @@ private:
   bool _bfd_loaded;
 
   typedef details::handle<bfd *,
-                          details::deleter<bfd_boolean, bfd *, &bfd_close>>
+                          details::deleter<bfd_boolean, bfd *, &bfd_close> >
       bfd_handle_t;
 
   typedef details::handle<asymbol **> bfd_symtab_t;
@@ -1636,9 +1636,9 @@ public:
   }
 
 private:
-  typedef details::handle<Dwfl *, details::deleter<void, Dwfl *, &dwfl_end>>
+  typedef details::handle<Dwfl *, details::deleter<void, Dwfl *, &dwfl_end> >
       dwfl_handle_t;
-  details::handle<Dwfl_Callbacks *, details::default_delete<Dwfl_Callbacks *>>
+  details::handle<Dwfl_Callbacks *, details::default_delete<Dwfl_Callbacks *> >
       _dwfl_cb;
   dwfl_handle_t _dwfl_handle;
   bool _dwfl_handle_initialized;
@@ -1962,14 +1962,14 @@ public:
 private:
   bool _dwarf_loaded;
 
-  typedef details::handle<int, details::deleter<int, int, &::close>>
+  typedef details::handle<int, details::deleter<int, int, &::close> >
       dwarf_file_t;
 
-  typedef details::handle<Elf *, details::deleter<int, Elf *, &elf_end>>
+  typedef details::handle<Elf *, details::deleter<int, Elf *, &elf_end> >
       dwarf_elf_t;
 
   typedef details::handle<Dwarf_Debug,
-                          details::deleter<int, Dwarf_Debug, &close_dwarf>>
+                          details::deleter<int, Dwarf_Debug, &close_dwarf> >
       dwarf_handle_t;
 
   typedef std::map<Dwarf_Addr, int> die_linemap_t;
@@ -3403,7 +3403,7 @@ class TraceResolver : public TraceResolverImpl<system_tag::current_tag> {};
 
 class SourceFile {
 public:
-  typedef std::vector<std::pair<unsigned, std::string>> lines_t;
+  typedef std::vector<std::pair<unsigned, std::string> > lines_t;
 
   SourceFile() {}
   SourceFile(const std::string &path) {
@@ -3514,7 +3514,7 @@ public:
 #endif
 
 private:
-  details::handle<std::ifstream *, details::default_delete<std::ifstream *>>
+  details::handle<std::ifstream *, details::default_delete<std::ifstream *> >
       _file;
 
   std::vector<std::string> get_paths_from_env_variable_impl() {
