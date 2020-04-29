@@ -3847,6 +3847,9 @@ private:
 
 #if defined(BACKWARD_SYSTEM_LINUX) || defined(BACKWARD_SYSTEM_DARWIN)
 
+const size_t stack_size = 8 * 1024 * 1024;
+static char *alt_stack = static_cast<char *>(malloc(stack_size));
+
 class SignalHandling {
 public:
   static std::vector<int> make_default_signals() {
@@ -3876,12 +3879,10 @@ public:
       : _loaded(false) {
     bool success = true;
 
-    const size_t stack_size = 1024 * 1024 * 8;
-    _stack_content.reset(static_cast<char *>(malloc(stack_size)));
-    if (_stack_content) {
+    if (alt_stack) {
       stack_t ss;
-      ss.ss_sp = _stack_content.get();
-      ss.ss_size = stack_size;
+      ss.ss_sp = alt_stack;
+      ss.ss_size = alt_stack;
       ss.ss_flags = 0;
       if (sigaltstack(&ss, nullptr) < 0) {
         success = false;
@@ -3961,7 +3962,6 @@ public:
   }
 
 private:
-  details::handle<char *> _stack_content;
   bool _loaded;
 
 #ifdef __GNUC__
