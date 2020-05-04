@@ -908,7 +908,7 @@ public:
     HANDLE process = GetCurrentProcess();
 
     STACKFRAME64 s;
-    memset(&s, 0, sizeof(STACKFRAME64));
+    memset(&s, 0, sizeof (STACKFRAME64));
 
     // TODO: 32 bit context capture
     s.AddrStack.Mode = AddrModeFlat;
@@ -3352,7 +3352,7 @@ public:
 
     char name[256];
 
-    memset(&sym, sizeof(sym), 0);
+    memset(&sym, 0,  sizeof sym);
     sym.sym.SizeOfStruct = sizeof(SYMBOL_INFO);
     sym.sym.MaxNameLen = max_sym_len;
 
