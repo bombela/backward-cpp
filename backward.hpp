@@ -481,7 +481,7 @@ template <typename T> struct default_delete {
   void operator()(T &ptr) const { delete ptr; }
 };
 
-template <typename T, typename Deleter = deleter<void, void *, &::free> >
+template <typename T, typename Deleter = deleter<void, void *, &::free>>
 class handle {
   struct dummy;
   T _val;
@@ -609,9 +609,9 @@ inline std::vector<std::string> split_source_prefixes(const std::string &s) {
   std::vector<std::string> out;
   size_t last = 0;
   size_t next = 0;
-  size_t delimiter_size = sizeof(kBackwardPathDelimiter)-1;
+  size_t delimiter_size = sizeof(kBackwardPathDelimiter) - 1;
   while ((next = s.find(kBackwardPathDelimiter, last)) != std::string::npos) {
-    out.push_back(s.substr(last, next-last));
+    out.push_back(s.substr(last, next - last));
     last = next + delimiter_size;
   }
   if (last <= s.length()) {
@@ -908,7 +908,7 @@ public:
     HANDLE process = GetCurrentProcess();
 
     STACKFRAME64 s;
-    memset(&s, 0, sizeof (STACKFRAME64));
+    memset(&s, 0, sizeof(STACKFRAME64));
 
     // TODO: 32 bit context capture
     s.AddrStack.Mode = AddrModeFlat;
@@ -1001,15 +1001,14 @@ private:
 
 #ifdef BACKWARD_SYSTEM_LINUX
 
-class TraceResolverLinuxBase
-    : public TraceResolverImplBase {
+class TraceResolverLinuxBase : public TraceResolverImplBase {
 public:
   TraceResolverLinuxBase()
-    : argv0_(get_argv0()), exec_path_(read_symlink("/proc/self/exe")) {
-  }
+      : argv0_(get_argv0()), exec_path_(read_symlink("/proc/self/exe")) {}
   std::string resolve_exec_path(Dl_info &symbol_info) const {
-    // mutates symbol_info.dli_fname to be filename to open and returns filename to display
-    if(symbol_info.dli_fname == argv0_) {
+    // mutates symbol_info.dli_fname to be filename to open and returns filename
+    // to display
+    if (symbol_info.dli_fname == argv0_) {
       // dladdr returns argv[0] in dli_fname for symbols contained in
       // the main executable, which is not a valid path if the
       // executable was found by a search of the PATH environment
@@ -1022,6 +1021,7 @@ public:
       return symbol_info.dli_fname;
     }
   }
+
 private:
   std::string argv0_;
   std::string exec_path_;
@@ -1262,7 +1262,7 @@ private:
   bool _bfd_loaded;
 
   typedef details::handle<bfd *,
-                          details::deleter<bfd_boolean, bfd *, &bfd_close> >
+                          details::deleter<bfd_boolean, bfd *, &bfd_close>>
       bfd_handle_t;
 
   typedef details::handle<asymbol **> bfd_symtab_t;
@@ -1636,9 +1636,9 @@ public:
   }
 
 private:
-  typedef details::handle<Dwfl *, details::deleter<void, Dwfl *, &dwfl_end> >
+  typedef details::handle<Dwfl *, details::deleter<void, Dwfl *, &dwfl_end>>
       dwfl_handle_t;
-  details::handle<Dwfl_Callbacks *, details::default_delete<Dwfl_Callbacks *> >
+  details::handle<Dwfl_Callbacks *, details::default_delete<Dwfl_Callbacks *>>
       _dwfl_cb;
   dwfl_handle_t _dwfl_handle;
   bool _dwfl_handle_initialized;
@@ -1962,14 +1962,14 @@ public:
 private:
   bool _dwarf_loaded;
 
-  typedef details::handle<int, details::deleter<int, int, &::close> >
+  typedef details::handle<int, details::deleter<int, int, &::close>>
       dwarf_file_t;
 
-  typedef details::handle<Elf *, details::deleter<int, Elf *, &elf_end> >
+  typedef details::handle<Elf *, details::deleter<int, Elf *, &elf_end>>
       dwarf_elf_t;
 
   typedef details::handle<Dwarf_Debug,
-                          details::deleter<int, Dwarf_Debug, &close_dwarf> >
+                          details::deleter<int, Dwarf_Debug, &close_dwarf>>
       dwarf_handle_t;
 
   typedef std::map<Dwarf_Addr, int> die_linemap_t;
@@ -3352,7 +3352,7 @@ public:
 
     char name[256];
 
-    memset(&sym, 0,  sizeof sym);
+    memset(&sym, 0, sizeof sym);
     sym.sym.SizeOfStruct = sizeof(SYMBOL_INFO);
     sym.sym.MaxNameLen = max_sym_len;
 
@@ -3403,19 +3403,20 @@ class TraceResolver : public TraceResolverImpl<system_tag::current_tag> {};
 
 class SourceFile {
 public:
-  typedef std::vector<std::pair<unsigned, std::string> > lines_t;
+  typedef std::vector<std::pair<unsigned, std::string>> lines_t;
 
   SourceFile() {}
   SourceFile(const std::string &path) {
     // 1. If BACKWARD_CXX_SOURCE_PREFIXES is set then assume it contains
     //    a colon-separated list of path prefixes.  Try prepending each
     //    to the given path until a valid file is found.
-    const std::vector<std::string>& prefixes = get_paths_from_env_variable();
+    const std::vector<std::string> &prefixes = get_paths_from_env_variable();
     for (size_t i = 0; i < prefixes.size(); ++i) {
       // Double slashes (//) should not be a problem.
       std::string new_path = prefixes[i] + '/' + path;
       _file.reset(new std::ifstream(new_path.c_str()));
-      if (is_open()) break;
+      if (is_open())
+        break;
     }
     // 2. If no valid file found then fallback to opening the path as-is.
     if (!_file || !is_open()) {
@@ -3514,19 +3515,19 @@ public:
 #endif
 
 private:
-  details::handle<std::ifstream *, details::default_delete<std::ifstream *> >
+  details::handle<std::ifstream *, details::default_delete<std::ifstream *>>
       _file;
 
   std::vector<std::string> get_paths_from_env_variable_impl() {
     std::vector<std::string> paths;
-    const char* prefixes_str = std::getenv("BACKWARD_CXX_SOURCE_PREFIXES");
+    const char *prefixes_str = std::getenv("BACKWARD_CXX_SOURCE_PREFIXES");
     if (prefixes_str && prefixes_str[0]) {
       paths = details::split_source_prefixes(prefixes_str);
     }
     return paths;
   }
 
-  const std::vector<std::string>& get_paths_from_env_variable() {
+  const std::vector<std::string> &get_paths_from_env_variable() {
     static std::vector<std::string> paths = get_paths_from_env_variable_impl();
     return paths;
   }
@@ -3930,7 +3931,8 @@ public:
 #elif defined(__aarch64__)
     error_addr = reinterpret_cast<void *>(uctx->uc_mcontext.pc);
 #elif defined(__mips__)
-    error_addr = reinterpret_cast<void *>(reinterpret_cast<struct sigcontext*>(&uctx->uc_mcontext)->sc_pc);
+    error_addr = reinterpret_cast<void *>(
+        reinterpret_cast<struct sigcontext *>(&uctx->uc_mcontext)->sc_pc);
 #elif defined(__ppc__) || defined(__powerpc) || defined(__powerpc__) ||        \
     defined(__POWERPC__)
     error_addr = reinterpret_cast<void *>(uctx->uc_mcontext.regs->nip);
