@@ -727,7 +727,7 @@ private:
 class StackTraceImplHolder : public StackTraceImplBase {
 public:
   size_t size() const {
-    return _stacktrace.size() ? _stacktrace.size() - skip_n_firsts() : 0;
+    return (_stacktrace.size() >= skip_n_firsts()) ? _stacktrace.size() - skip_n_firsts() : 0;
   }
   Trace operator[](size_t idx) const {
     if (idx >= size()) {
