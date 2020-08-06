@@ -2831,7 +2831,7 @@ private:
             trace.object_function = demangler.demangle(linkage);
             dwarf_dealloc(dwarf, linkage, DW_DLA_STRING);
           }
-          dwarf_dealloc(dwarf, name, DW_DLA_ATTR);
+          dwarf_dealloc(dwarf, attr_mem, DW_DLA_ATTR);
         }
         break;
 
