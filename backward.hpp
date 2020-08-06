@@ -1779,9 +1779,9 @@ private:
 
   static const char *die_call_file(Dwarf_Die *die) {
     Dwarf_Attribute attr_mem;
-    Dwarf_Sword file_idx = 0;
+    Dwarf_Word file_idx = 0;
 
-    dwarf_formsdata(dwarf_attr(die, DW_AT_call_file, &attr_mem), &file_idx);
+    dwarf_formudata(dwarf_attr(die, DW_AT_call_file, &attr_mem), &file_idx);
 
     if (file_idx == 0) {
       return 0;
@@ -3039,12 +3039,12 @@ private:
                                    Dwarf_Die cu_die) {
     Dwarf_Attribute attr_mem;
     Dwarf_Error error = DW_DLE_NE;
-    Dwarf_Signed file_index;
+    Dwarf_Unsigned file_index;
 
     std::string file;
 
     if (dwarf_attr(die, DW_AT_call_file, &attr_mem, &error) == DW_DLV_OK) {
-      if (dwarf_formsdata(attr_mem, &file_index, &error) != DW_DLV_OK) {
+      if (dwarf_formudata(attr_mem, &file_index, &error) != DW_DLV_OK) {
         file_index = 0;
       }
       dwarf_dealloc(dwarf, attr_mem, DW_DLA_ATTR);
@@ -3056,8 +3056,9 @@ private:
       char **srcfiles = 0;
       Dwarf_Signed file_count = 0;
       if (dwarf_srcfiles(cu_die, &srcfiles, &file_count, &error) == DW_DLV_OK) {
-        if (file_index <= file_count)
+        if (file_count > 0 && file_index <= static_cast<Dwarf_Unsigned>(file_count)) {
           file = std::string(srcfiles[file_index - 1]);
+	}
 
         // Deallocate all strings!
         for (int i = 0; i < file_count; ++i) {
