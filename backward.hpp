@@ -49,6 +49,9 @@
 // #define BACKWARD_SYSTEM_DARWIN
 //	- specialization for Mac OS X 10.5 and later.
 //
+// #define BACKWARD_SYSTEM_WINDOWS
+//  - specialization for Windows (Clang 9 and MSVC2017)
+//
 // #define BACKWARD_SYSTEM_UNKNOWN
 //	- placebo implementation, does nothing.
 //
@@ -97,6 +100,11 @@
 //  exception.
 //  - normally libgcc is already linked to your program by default.
 //
+// #define BACKWARD_HAS_LIBUNWIND 1
+//  - libunwind provides, in some cases, a more accurate stacktrace as it knows
+//  to decode signal handler frames and lets us edit the context registers when
+//  unwinding, allowing stack traces over bad function references.
+//
 // #define BACKWARD_HAS_BACKTRACE == 1
 //  - backtrace seems to be a little bit more portable than libunwind, but on
 //  linux, it uses unwind anyway, but abstract away a tiny information that is
@@ -109,10 +117,13 @@
 // Note that only one of the define should be set to 1 at a time.
 //
 #if BACKWARD_HAS_UNWIND == 1
+#elif BACKWARD_HAS_LIBUNWIND == 1
 #elif BACKWARD_HAS_BACKTRACE == 1
 #else
 #undef BACKWARD_HAS_UNWIND
 #define BACKWARD_HAS_UNWIND 1
+#undef BACKWARD_HAS_LIBUNWIND
+#define BACKWARD_HAS_LIBUNWIND 0
 #undef BACKWARD_HAS_BACKTRACE
 #define BACKWARD_HAS_BACKTRACE 0
 #endif
@@ -257,6 +268,12 @@
 //  exception.
 //  - normally libgcc is already linked to your program by default.
 //
+// #define BACKWARD_HAS_LIBUNWIND 1
+//  - libunwind comes from clang, which implements an API compatible version.
+//  - libunwind provides, in some cases, a more accurate stacktrace as it knows
+//  to decode signal handler frames and lets us edit the context registers when
+//  unwinding, allowing stack traces over bad function references.
+//
 // #define BACKWARD_HAS_BACKTRACE == 1
 //  - backtrace is available by default, though it does not produce as much
 //  information as another library might.
@@ -268,11 +285,14 @@
 //
 #if BACKWARD_HAS_UNWIND == 1
 #elif BACKWARD_HAS_BACKTRACE == 1
+#elif BACKWARD_HAS_LIBUNWIND == 1
 #else
 #undef BACKWARD_HAS_UNWIND
 #define BACKWARD_HAS_UNWIND 1
 #undef BACKWARD_HAS_BACKTRACE
 #define BACKWARD_HAS_BACKTRACE 0
+#undef BACKWARD_HAS_LIBUNWIND
+#define BACKWARD_HAS_LIBUNWIND 0
 #endif
 
 // On Darwin, backward can extract detailed information about a stack trace
@@ -370,6 +390,11 @@ extern "C" uintptr_t _Unwind_GetIPInfo(_Unwind_Context *, int *);
 #endif
 
 #endif // BACKWARD_HAS_UNWIND == 1
+
+#if BACKWARD_HAS_LIBUNWIND == 1
+#define UNW_LOCAL_ONLY
+#include <libunwind.h>
+#endif // BACKWARD_HAS_LIBUNWIND == 1
 
 #ifdef BACKWARD_ATLEAST_CXX11
 #include <unordered_map>
@@ -682,14 +707,17 @@ public:
   size_t size() const { return 0; }
   Trace operator[](size_t) const { return Trace(); }
   size_t load_here(size_t = 0) { return 0; }
-  size_t load_from(void *, size_t = 0) { return 0; }
+  size_t load_from(void *, size_t = 0, void * = nullptr, void * = nullptr) {
+    return 0;
+  }
   size_t thread_id() const { return 0; }
   void skip_n_firsts(size_t) {}
 };
 
 class StackTraceImplBase {
 public:
-  StackTraceImplBase() : _thread_id(0), _skip(0) {}
+  StackTraceImplBase()
+      : _thread_id(0), _skip(0), _context(nullptr), _error_addr(nullptr) {}
 
   size_t thread_id() const { return _thread_id; }
 
@@ -717,17 +745,27 @@ protected:
 #endif
   }
 
+  void set_context(void *context) { _context = context; }
+  void *context() const { return _context; }
+
+  void set_error_addr(void *error_addr) { _error_addr = error_addr; }
+  void *error_addr() const { return _error_addr; }
+
   size_t skip_n_firsts() const { return _skip; }
 
 private:
   size_t _thread_id;
   size_t _skip;
+  void *_context;
+  void *_error_addr;
 };
 
 class StackTraceImplHolder : public StackTraceImplBase {
 public:
   size_t size() const {
-    return (_stacktrace.size() >= skip_n_firsts()) ? _stacktrace.size() - skip_n_firsts() : 0;
+    return (_stacktrace.size() >= skip_n_firsts())
+               ? _stacktrace.size() - skip_n_firsts()
+               : 0;
   }
   Trace operator[](size_t idx) const {
     if (idx >= size()) {
@@ -808,8 +846,11 @@ template <>
 class StackTraceImpl<system_tag::current_tag> : public StackTraceImplHolder {
 public:
   NOINLINE
-  size_t load_here(size_t depth = 32) {
+  size_t load_here(size_t depth = 32, void *context = nullptr,
+                   void *error_addr = nullptr) {
     load_thread_info();
+    set_context(context);
+    set_error_addr(error_addr);
     if (depth == 0) {
       return 0;
     }
@@ -819,8 +860,9 @@ public:
     skip_n_firsts(0);
     return size();
   }
-  size_t load_from(void *addr, size_t depth = 32) {
-    load_here(depth + 8);
+  size_t load_from(void *addr, size_t depth = 32, void *context = nullptr,
+                   void *error_addr = nullptr) {
+    load_here(depth + 8, context, error_addr);
 
     for (size_t i = 0; i < _stacktrace.size(); ++i) {
       if (_stacktrace[i] == addr) {
@@ -842,13 +884,193 @@ private:
   };
 };
 
+#elif BACKWARD_HAS_LIBUNWIND == 1
+
+template <>
+class StackTraceImpl<system_tag::current_tag> : public StackTraceImplHolder {
+public:
+  __attribute__((noinline)) size_t load_here(size_t depth = 32,
+                                             void *_context = nullptr,
+                                             void *_error_addr = nullptr) {
+    set_context(_context);
+    set_error_addr(_error_addr);
+    load_thread_info();
+    if (depth == 0) {
+      return 0;
+    }
+    _stacktrace.resize(depth + 1);
+
+    int result = 0;
+
+    unw_context_t ctx;
+    size_t index = 0;
+
+    // Add the tail call. If the Instruction Pointer is the crash address it
+    // means we got a bad function pointer dereference, so we "unwind" the
+    // bad pointer manually by using the return address pointed to by the
+    // Stack Pointer as the Instruction Pointer and letting libunwind do
+    // the rest
+
+    if (context()) {
+      ucontext_t *uctx = reinterpret_cast<ucontext_t *>(context());
+#ifdef REG_RIP         // x86_64
+      if (uctx->uc_mcontext.gregs[REG_RIP] ==
+          reinterpret_cast<greg_t>(error_addr())) {
+        uctx->uc_mcontext.gregs[REG_RIP] =
+            *reinterpret_cast<size_t *>(uctx->uc_mcontext.gregs[REG_RSP]);
+      }
+      _stacktrace[index] =
+          reinterpret_cast<void *>(uctx->uc_mcontext.gregs[REG_RIP]);
+      ++index;
+      ctx = *reinterpret_cast<unw_context_t *>(uctx);
+#elif defined(REG_EIP) // x86_32
+      if (uctx->uc_mcontext.gregs[REG_EIP] ==
+          reinterpret_cast<greg_t>(error_addr())) {
+        uctx->uc_mcontext.gregs[REG_EIP] =
+            *reinterpret_cast<size_t *>(uctx->uc_mcontext.gregs[REG_ESP]);
+      }
+      _stacktrace[index] =
+          reinterpret_cast<void *>(uctx->uc_mcontext.gregs[REG_EIP]);
+      ++index;
+      ctx = *reinterpret_cast<unw_context_t *>(uctx);
+#elif defined(__arm__)
+      // libunwind uses its own context type for ARM unwinding.
+      // Copy the registers from the signal handler's context so we can
+      // unwind
+      unw_getcontext(&ctx);
+      ctx.regs[UNW_ARM_R0] = uctx->uc_mcontext.arm_r0;
+      ctx.regs[UNW_ARM_R1] = uctx->uc_mcontext.arm_r1;
+      ctx.regs[UNW_ARM_R2] = uctx->uc_mcontext.arm_r2;
+      ctx.regs[UNW_ARM_R3] = uctx->uc_mcontext.arm_r3;
+      ctx.regs[UNW_ARM_R4] = uctx->uc_mcontext.arm_r4;
+      ctx.regs[UNW_ARM_R5] = uctx->uc_mcontext.arm_r5;
+      ctx.regs[UNW_ARM_R6] = uctx->uc_mcontext.arm_r6;
+      ctx.regs[UNW_ARM_R7] = uctx->uc_mcontext.arm_r7;
+      ctx.regs[UNW_ARM_R8] = uctx->uc_mcontext.arm_r8;
+      ctx.regs[UNW_ARM_R9] = uctx->uc_mcontext.arm_r9;
+      ctx.regs[UNW_ARM_R10] = uctx->uc_mcontext.arm_r10;
+      ctx.regs[UNW_ARM_R11] = uctx->uc_mcontext.arm_fp;
+      ctx.regs[UNW_ARM_R12] = uctx->uc_mcontext.arm_ip;
+      ctx.regs[UNW_ARM_R13] = uctx->uc_mcontext.arm_sp;
+      ctx.regs[UNW_ARM_R14] = uctx->uc_mcontext.arm_lr;
+      ctx.regs[UNW_ARM_R15] = uctx->uc_mcontext.arm_pc;
+
+      // If we have crashed in the PC use the LR instead, as this was
+      // a bad function dereference
+      if (reinterpret_cast<unsigned long>(error_addr()) ==
+          uctx->uc_mcontext.arm_pc) {
+        ctx.regs[UNW_ARM_R15] =
+            uctx->uc_mcontext.arm_lr - sizeof(unsigned long);
+      }
+      _stacktrace[index] = reinterpret_cast<void *>(ctx.regs[UNW_ARM_R15]);
+      ++index;
+#elif defined(__APPLE__) && defined(__x86_64__)
+      unw_getcontext(&ctx);
+      // OS X's implementation of libunwind uses its own context object
+      // so we need to convert the passed context to libunwind's format
+      // (information about the data layout taken from unw_getcontext.s
+      // in Apple's libunwind source
+      ctx.data[0] = uctx->uc_mcontext->__ss.__rax;
+      ctx.data[1] = uctx->uc_mcontext->__ss.__rbx;
+      ctx.data[2] = uctx->uc_mcontext->__ss.__rcx;
+      ctx.data[3] = uctx->uc_mcontext->__ss.__rdx;
+      ctx.data[4] = uctx->uc_mcontext->__ss.__rdi;
+      ctx.data[5] = uctx->uc_mcontext->__ss.__rsi;
+      ctx.data[6] = uctx->uc_mcontext->__ss.__rbp;
+      ctx.data[7] = uctx->uc_mcontext->__ss.__rsp;
+      ctx.data[8] = uctx->uc_mcontext->__ss.__r8;
+      ctx.data[9] = uctx->uc_mcontext->__ss.__r9;
+      ctx.data[10] = uctx->uc_mcontext->__ss.__r10;
+      ctx.data[11] = uctx->uc_mcontext->__ss.__r11;
+      ctx.data[12] = uctx->uc_mcontext->__ss.__r12;
+      ctx.data[13] = uctx->uc_mcontext->__ss.__r13;
+      ctx.data[14] = uctx->uc_mcontext->__ss.__r14;
+      ctx.data[15] = uctx->uc_mcontext->__ss.__r15;
+      ctx.data[16] = uctx->uc_mcontext->__ss.__rip;
+
+      // If the IP is the same as the crash address we have a bad function
+      // dereference The caller's address is pointed to by %rsp, so we
+      // dereference that value and set it to be the next frame's IP.
+      if (uctx->uc_mcontext->__ss.__rip ==
+          reinterpret_cast<__uint64_t>(error_addr())) {
+        ctx.data[16] =
+            *reinterpret_cast<__uint64_t *>(uctx->uc_mcontext->__ss.__rsp);
+      }
+      _stacktrace[index] = reinterpret_cast<void *>(ctx.data[16]);
+      ++index;
+#elif defined(__APPLE__)
+      unw_getcontext(&ctx)
+          // TODO: Convert the ucontext_t to libunwind's unw_context_t like
+          // we do in 64 bits
+          if (ctx.uc_mcontext->__ss.__eip ==
+              reinterpret_cast<greg_t>(error_addr())) {
+        ctx.uc_mcontext->__ss.__eip = ctx.uc_mcontext->__ss.__esp;
+      }
+      _stacktrace[index] =
+          reinterpret_cast<void *>(ctx.uc_mcontext->__ss.__eip);
+      ++index;
+#endif
+    }
+
+    unw_cursor_t cursor;
+    if (context()) {
+#if defined(UNW_INIT_SIGNAL_FRAME)
+      result = unw_init_local2(&cursor, &ctx, UNW_INIT_SIGNAL_FRAME);
+#else
+      result = unw_init_local(&cursor, &ctx);
+#endif
+    } else {
+      unw_getcontext(&ctx);
+      ;
+      result = unw_init_local(&cursor, &ctx);
+    }
+
+    if (result != 0)
+      return 1;
+
+    unw_word_t ip = 0;
+
+    while (index <= depth && unw_step(&cursor) > 0) {
+      result = unw_get_reg(&cursor, UNW_REG_IP, &ip);
+      if (result == 0) {
+        _stacktrace[index] = reinterpret_cast<void *>(--ip);
+        ++index;
+      }
+    }
+    --index;
+
+    _stacktrace.resize(index + 1);
+    skip_n_firsts(0);
+    return size();
+  }
+
+  size_t load_from(void *addr, size_t depth = 32, void *context = nullptr,
+                   void *error_addr = nullptr) {
+    load_here(depth + 8, context, error_addr);
+
+    for (size_t i = 0; i < _stacktrace.size(); ++i) {
+      if (_stacktrace[i] == addr) {
+        skip_n_firsts(i);
+        _stacktrace[i] = (void *)((uintptr_t)_stacktrace[i]);
+        break;
+      }
+    }
+
+    _stacktrace.resize(std::min(_stacktrace.size(), skip_n_firsts() + depth));
+    return size();
+  }
+};
+
 #elif defined(BACKWARD_HAS_BACKTRACE)
 
 template <>
 class StackTraceImpl<system_tag::current_tag> : public StackTraceImplHolder {
 public:
   NOINLINE
-  size_t load_here(size_t depth = 32) {
+  size_t load_here(size_t depth = 32, void *context = nullptr,
+                   void *error_addr = nullptr) {
+    set_context(context);
+    set_error_addr(error_addr);
     load_thread_info();
     if (depth == 0) {
       return 0;
@@ -860,8 +1082,9 @@ public:
     return size();
   }
 
-  size_t load_from(void *addr, size_t depth = 32) {
-    load_here(depth + 8);
+  size_t load_from(void *addr, size_t depth = 32, void *context = nullptr,
+                   void *error_addr = nullptr) {
+    load_here(depth + 8, contxt, error_addr);
 
     for (size_t i = 0; i < _stacktrace.size(); ++i) {
       if (_stacktrace[i] == addr) {
@@ -888,8 +1111,10 @@ public:
   void set_thread_handle(HANDLE handle) { thd_ = handle; }
 
   NOINLINE
-  size_t load_here(size_t depth = 32) {
-
+  size_t load_here(size_t depth = 32, void *context = nullptr,
+                   void *error_addr = nullptr) {
+    set_context(context);
+    set_error_addr(error_addr);
     CONTEXT localCtx; // used when no context is provided
 
     if (depth == 0) {
@@ -951,8 +1176,9 @@ public:
     return size();
   }
 
-  size_t load_from(void *addr, size_t depth = 32) {
-    load_here(depth + 8);
+  size_t load_from(void *addr, size_t depth = 32, void *context = nullptr,
+                   void *error_addr = nullptr) {
+    load_here(depth + 8, context, error_addr);
 
     for (size_t i = 0; i < _stacktrace.size(); ++i) {
       if (_stacktrace[i] == addr) {
@@ -3946,9 +4172,10 @@ public:
 #warning ":/ sorry, ain't know no nothing none not of your architecture!"
 #endif
     if (error_addr) {
-      st.load_from(error_addr, 32);
+      st.load_from(error_addr, 32, reinterpret_cast<void *>(uctx),
+                   info->si_addr);
     } else {
-      st.load_here(32);
+      st.load_here(32, reinterpret_cast<void *>(uctx), info->si_addr);
     }
 
     Printer printer;

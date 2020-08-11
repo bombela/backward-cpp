@@ -93,6 +93,35 @@ find_package(Backward)
 # through an IMPORTED target.
 target_link_libraries(mytarget PUBLIC Backward::Backward)
 ```
+### Libraries to unwind the stack
+
+On Linux and macOS, backtrace can back-trace or "walk" the stack using the
+following libraries:
+
+#### unwind
+
+Unwind comes from libgcc, but there is an equivalent inside clang itself. With
+unwind, the stacktrace is as accurate as it can possibly be, since this is
+used by the C++ runtine in gcc/clang for stack unwinding on exception.
+
+Normally libgcc is already linked to your program by default.
+
+#### libunwind from the [libunwind project](https://github.com/libunwind/libunwind)
+
+	apt-get install binutils-dev (or equivalent)
+
+Libunwind provides, in some cases, a more accurate stacktrace as it knows
+to decode signal handler frames and lets us edit the context registers when
+unwinding, allowing stack traces over bad function references.
+
+For best results make sure you are using libunwind 1.3 or later, which added
+`unw_init_local2` and support for handling signal frames.
+
+CMake will warn you when configuring if your libunwind version doesn't support
+signal frames.
+
+On macOS clang provides a libunwind API compatible library as part of its
+environment, so no third party libraries are necessary.
 
 ### Compile with debug info
 
@@ -110,17 +139,17 @@ your sources.
 
 ### Libraries to read the debug info
 
-Backward support pretty printed stack traces on GNU/Linux only, it will compile
-fine under other platforms but will not do anything.  **Pull requests are
-welcome :)**
+Backward supports pretty printed stack traces on GNU/Linux, macOS and Windows,
+it will compile fine under other platforms but will not do anything. **Pull
+requests are welcome :)**
 
 Also, by default you will get a really basic stack trace, based on the
 `backtrace_symbols` API:
 
 ![default trace](doc/nice.png)
 
-You will need to install some dependencies to get the ultimate stack trace. Two
-libraries are currently supported, the only difference is which one is the
+You will need to install some dependencies to get the ultimate stack trace.
+Three libraries are currently supported, the only difference is which one is the
 easiest for you to install, so pick your poison:
 
 #### libbfd from the [GNU/binutils](http://www.gnu.org/software/binutils/)

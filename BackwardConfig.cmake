@@ -28,6 +28,8 @@ set(STACK_WALKING_UNWIND TRUE CACHE BOOL
 	"Use compiler's unwind API")
 set(STACK_WALKING_BACKTRACE FALSE CACHE BOOL
 	"Use backtrace from (e)glibc for stack walking")
+set(STACK_WALKING_LIBUNWIND FALSE CACHE BOOL
+	"Use libunwind for stack walking")
 
 set(STACK_DETAILS_AUTO_DETECT TRUE CACHE BOOL
 	"Auto detect backward's stack details dependencies")
@@ -50,9 +52,37 @@ endif()
 ###############################################################################
 # CONFIGS
 ###############################################################################
-if (${STACK_DETAILS_AUTO_DETECT})
-	include(FindPackageHandleStandardArgs)
+include(FindPackageHandleStandardArgs)
 
+if (STACK_WALKING_LIBUNWIND)
+	# libunwind works on the macOS without having to add special include
+	# paths or libraries
+	if (NOT APPLE)
+		find_path(LIBUNWIND_INCLUDE_DIR NAMES "libunwind.h")
+		find_library(LIBUNWIND_LIBRARY unwind)
+
+		if (LIBUNWIND_LIBRARY)
+			include(CheckSymbolExists)
+			check_symbol_exists(UNW_INIT_SIGNAL_FRAME libunwind.h HAVE_UNW_INIT_SIGNAL_FRAME)
+			if (NOT HAVE_UNW_INIT_SIGNAL_FRAME)
+				message(STATUS "libunwind does not support unwinding from signal handler frames")
+			endif()
+		endif()
+
+		set(LIBUNWIND_INCLUDE_DIRS ${LIBUNWIND_INCLUDE_DIR})
+		set(LIBDWARF_LIBRARIES ${LIBUNWIND_LIBRARY})
+		find_package_handle_standard_args(libunwind DEFAULT_MSG
+			LIBUNWIND_LIBRARY LIBUNWIND_INCLUDE_DIR)
+		mark_as_advanced(LIBUNWIND_INCLUDE_DIR LIBUNWIND_LIBRARY)
+		list(APPEND _BACKWARD_LIBRARIES ${LIBUNWIND_LIBRARY})
+	endif()
+
+	# Disable other unwinders if libunwind is found
+	set(STACK_WALKING_UNWIND FALSE)
+	set(STACK_WALKING_BACKTRACE FALSE)	
+endif()
+
+if (${STACK_DETAILS_AUTO_DETECT})
 	# find libdw
 	find_path(LIBDW_INCLUDE_DIR NAMES "elfutils/libdw.h" "elfutils/libdwfl.h")
 	find_library(LIBDW_LIBRARY dw)
@@ -152,7 +182,7 @@ macro(map_definitions var_prefix define_prefix)
 endmacro()
 
 if (NOT _BACKWARD_DEFINITIONS)
-	map_definitions("STACK_WALKING_" "BACKWARD_HAS_" UNWIND BACKTRACE)
+	map_definitions("STACK_WALKING_" "BACKWARD_HAS_" UNWIND LIBUNWIND BACKTRACE)
 	map_definitions("STACK_DETAILS_" "BACKWARD_HAS_" BACKTRACE_SYMBOL DW BFD DWARF)
 endif()
 
