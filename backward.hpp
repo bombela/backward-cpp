@@ -3300,9 +3300,9 @@ public:
     ret.base_address = mi.lpBaseOfDll;
     ret.load_size = mi.SizeOfImage;
 
-    GetModuleFileNameEx(process, module, temp, sizeof(temp));
+    GetModuleFileNameExA(process, module, temp, sizeof(temp));
     ret.image_name = temp;
-    GetModuleBaseName(process, module, temp, sizeof(temp));
+    GetModuleBaseNameA(process, module, temp, sizeof(temp));
     ret.module_name = temp;
     std::vector<char> img(ret.image_name.begin(), ret.image_name.end());
     std::vector<char> mod(ret.module_name.begin(), ret.module_name.end());
@@ -3358,14 +3358,14 @@ public:
 
     if (!SymFromAddr(process, (ULONG64)t.addr, &displacement, &sym.sym)) {
       // TODO:  error handling everywhere
-      LPTSTR lpMsgBuf;
+      char* lpMsgBuf;
       DWORD dw = GetLastError();
 
-      FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+      FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
                         FORMAT_MESSAGE_FROM_SYSTEM |
                         FORMAT_MESSAGE_IGNORE_INSERTS,
                     NULL, dw, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                    (LPTSTR)&lpMsgBuf, 0, NULL);
+                    (char*)&lpMsgBuf, 0, NULL);
 
       printf(lpMsgBuf);
 
