@@ -3840,7 +3840,7 @@ private:
     //This allows double clicking on the line in the output window, which opens that corresponding file & file
     os << "\n";//Need a newline or it does not work
     os << source_loc.filename << "(" << source_loc.line << "):";//This exact format is required
-    os << " line"  << source_loc.line << ", in " << source_loc.function;
+    os << " line "  << source_loc.line << ", in " << source_loc.function;
 #else
 	  os << indent << "Source \"" << source_loc.filename << "\", line "
 		  << source_loc.line << ", in " << source_loc.function;
