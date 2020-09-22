@@ -530,7 +530,7 @@ public:
 
   void update(T new_val) {
     _val = new_val;
-    _empty = static_cast<bool>(new_val);
+    _empty = !static_cast<bool>(new_val);
   }
 
   operator const dummy *() const {
