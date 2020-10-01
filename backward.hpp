@@ -87,6 +87,7 @@
 #include <streambuf>
 #include <string>
 #include <vector>
+#include <exception>
 
 #if defined(BACKWARD_SYSTEM_LINUX)
 
@@ -330,14 +331,14 @@
 #include <mutex>
 #include <thread>
 
-#include <BaseTsd.h>
+#include <basetsd.h>
 typedef SSIZE_T ssize_t;
 
 #define NOMINMAX
-#include <Windows.h>
+#include <windows.h>
 #include <winnt.h>
 
-#include <Psapi.h>
+#include <psapi.h>
 #include <signal.h>
 
 #ifndef __clang__
@@ -3579,7 +3580,7 @@ public:
 
     char name[256];
 
-    memset(&sym, 0, sizeof sym);
+    memset(&sym, 0, sizeof(sym));
     sym.sym.SizeOfStruct = sizeof(SYMBOL_INFO);
     sym.sym.MaxNameLen = max_sym_len;
 
@@ -4244,8 +4245,8 @@ public:
     signal(SIGABRT, signal_handler);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 
-    set_terminate(&terminator);
-    set_unexpected(&terminator);
+    std::set_terminate(&terminator);
+    std::set_unexpected(&terminator);
     _set_purecall_handler(&terminator);
     _set_invalid_parameter_handler(&invalid_parameter_handler);
   }
