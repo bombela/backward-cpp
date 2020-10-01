@@ -70,20 +70,7 @@
 
 #define NOINLINE __attribute__((noinline))
 
-#include <algorithm>
-#include <cctype>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-#include <limits>
-#include <new>
-#include <sstream>
-#include <streambuf>
-#include <string>
-#include <vector>
+#include <bits/stdc++.h>
 
 #if defined(BACKWARD_SYSTEM_LINUX)
 
