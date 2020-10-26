@@ -37,7 +37,9 @@ errors (segfault, abort, un-handled exception...), simply add a copy of
 `backward.cpp` to your project, and don't forget to tell your build system.
 
 The code in `backward.cpp` is trivial anyway, you can simply copy what it's
-doing at your convenience.
+doing at your convenience. 
+
+Note for [folly](https://github.com/facebook/folly) library users: must define `backward::SignalHandling sh;` after `folly::init(&argc, &argv);`.
 
 ## Configuration & Dependencies
 
