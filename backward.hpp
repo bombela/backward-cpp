@@ -4159,7 +4159,7 @@ public:
 #elif defined(__aarch64__)
     #if defined(__APPLE__)
       error_addr = reinterpret_cast<void *>(uctx->uc_mcontext->__ss.__pc);
-    #elif
+    #else
       error_addr = reinterpret_cast<void *>(uctx->uc_mcontext.pc);
     #endif
 #elif defined(__mips__)
