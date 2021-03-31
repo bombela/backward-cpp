@@ -3834,7 +3834,7 @@ public:
   cfile_streambuf(FILE *_sink) : sink(_sink) {}
   int_type underflow() override { return traits_type::eof(); }
   int_type overflow(int_type ch) override {
-    if (traits_type::not_eof(ch) && fwrite(&ch, sizeof ch, 1, sink) == 1) {
+    if (traits_type::not_eof(ch) && fputc(ch, sink) != EOF) {
       return ch;
     }
     return traits_type::eof();
