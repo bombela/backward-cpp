@@ -35,6 +35,9 @@
 #define BACKWARD_CXX11
 #define BACKWARD_ATLEAST_CXX11
 #define BACKWARD_ATLEAST_CXX98
+#if __cplusplus >= 201703L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)
+#define BACKWARD_ATLEAST_CXX17
+#endif
 #else
 #define BACKWARD_CXX98
 #define BACKWARD_ATLEAST_CXX98
@@ -4250,7 +4253,9 @@ public:
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 
     std::set_terminate(&terminator);
+#ifndef BACKWARD_ATLEAST_CXX17
     std::set_unexpected(&terminator);
+#endif
     _set_purecall_handler(&terminator);
     _set_invalid_parameter_handler(&invalid_parameter_handler);
   }
