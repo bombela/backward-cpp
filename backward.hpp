@@ -3583,7 +3583,8 @@ public:
   }
 };
 
-template <> class TraceResolverImpl<system_tag::windows_tag> {
+template <> class TraceResolverImpl<system_tag::windows_tag>
+    : public TraceResolverImplBase {
 public:
   TraceResolverImpl() {
 
