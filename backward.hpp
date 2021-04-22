@@ -3616,7 +3616,7 @@ public:
 
   DWORD64 displacement;
 
-  ResolvedTrace resolve(ResolvedTrace t) override {
+  ResolvedTrace resolve(ResolvedTrace t) {
     HANDLE process = GetCurrentProcess();
 
     char name[256];
