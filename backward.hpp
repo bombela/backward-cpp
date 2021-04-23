@@ -1209,7 +1209,10 @@ class StackTrace : public StackTraceImpl<system_tag::current_tag> {};
 
 class TraceResolverImplBase {
 public:
-  virtual void load_addresses(void *const*addresses, int address_count) {}
+  virtual void load_addresses(void *const*addresses, int address_count) {
+    (void)addresses;
+    (void)address_count;
+  }
 
   template <class ST> void load_stacktrace(ST &st) {
     load_addresses(st.begin(), (int)st.size());
