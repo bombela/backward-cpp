@@ -1209,6 +1209,8 @@ class StackTrace : public StackTraceImpl<system_tag::current_tag> {};
 
 class TraceResolverImplBase {
 public:
+  virtual ~TraceResolverImplBase() {}
+
   virtual void load_addresses(void *const*addresses, int address_count) {
     (void)addresses;
     (void)address_count;
