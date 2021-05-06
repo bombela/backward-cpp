@@ -4429,9 +4429,8 @@ private:
 
     StackTrace st;
     st.set_machine_type(printer.resolver().machine_type());
-    st.set_context(ctx());
     st.set_thread_handle(thread_handle());
-    st.load_here(32 + skip_frames);
+    st.load_here(32 + skip_frames, ctx());
     st.skip_n_firsts(skip_frames);
 
     printer.address = true;
