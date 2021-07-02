@@ -1089,7 +1089,7 @@ public:
 
   size_t load_from(void *addr, size_t depth = 32, void *context = nullptr,
                    void *error_addr = nullptr) {
-    load_here(depth + 8, contxt, error_addr);
+    load_here(depth + 8, context, error_addr);
 
     for (size_t i = 0; i < _stacktrace.size(); ++i) {
       if (_stacktrace[i] == addr) {
