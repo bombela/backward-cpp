@@ -141,9 +141,10 @@
 //    - object filename
 //    - function name
 //    - source filename
-//	  - line and column numbers
-//	  - source code snippet (assuming the file is accessible)
-//	  - variables name and values (if not optimized out)
+//    - line and column numbers
+//    - source code snippet (assuming the file is accessible)
+//    - variable names (if not optimized out)
+//    - variable values (not supported by backward-cpp)
 //  - You need to link with the lib "dw":
 //    - apt-get install libdw-dev
 //    - g++/clang++ -ldw ...
@@ -153,8 +154,8 @@
 //    - object filename
 //    - function name
 //    - source filename
-//	  - line numbers
-//	  - source code snippet (assuming the file is accessible)
+//    - line numbers
+//    - source code snippet (assuming the file is accessible)
 //  - You need to link with the lib "bfd":
 //    - apt-get install binutils-dev
 //    - g++/clang++ -lbfd ...
@@ -166,7 +167,8 @@
 //    - source filename
 //    - line and column numbers
 //    - source code snippet (assuming the file is accessible)
-//    - variables name and values (if not optimized out)
+//    - variable names (if not optimized out)
+//    - variable values (not supported by backward-cpp)
 //  - You need to link with the lib "dwarf":
 //    - apt-get install libdwarf-dev
 //    - g++/clang++ -ldwarf ...
