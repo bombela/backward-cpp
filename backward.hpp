@@ -3974,8 +3974,8 @@ public:
   int inliner_context_size;
   int trace_context_size;
 
-  Printer()
-      : snippet(true), color_mode(ColorMode::automatic), address(false),
+  Printer(bool snippet=true)
+      : snippet(snippet), color_mode(ColorMode::automatic), address(false),
         object(false), inliner_context_size(5), trace_context_size(7) {}
 
   template <typename ST> FILE *print(ST &st, FILE *fp = stderr) {
