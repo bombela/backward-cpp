@@ -340,7 +340,9 @@
 #include <basetsd.h>
 typedef SSIZE_T ssize_t;
 
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <winnt.h>
 
