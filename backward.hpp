@@ -354,8 +354,10 @@ typedef SSIZE_T ssize_t;
 #define NOINLINE __declspec(noinline)
 #endif
 
+#ifdef _MSC_VER
 #pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "dbghelp.lib")
+#endif
 
 // Comment / packing is from stackoverflow:
 // https://stackoverflow.com/questions/6205981/windows-c-stack-trace-from-a-running-app/28276227#28276227
