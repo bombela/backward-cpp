@@ -26,7 +26,7 @@
 #include <cstdlib>
 
 #ifdef _WIN32
-#include <Windows.h>
+#include <windows.h>
 #define strcasecmp _stricmp
 #else
 #include <sys/wait.h>
