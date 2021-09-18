@@ -44,14 +44,6 @@ if (DEFINED ENV{OMPI_CXX} OR DEFINED ENV{MPICH_CXX})
    endif()
 endif()
 
-# set CXX standard
-set(CMAKE_CXX_STANDARD_REQUIRED True)
-set(CMAKE_CXX_STANDARD 11)
-if (${COMPILER_IS_NVCC})
-  # GNU CXX extensions are not supported by nvcc
-  set(CMAKE_CXX_EXTENSIONS OFF)
-endif()
-
 ###############################################################################
 # COMPILER FLAGS
 ###############################################################################
@@ -71,6 +63,16 @@ endif()
 add_library(backward_object OBJECT backward.cpp)
 target_compile_definitions(backward_object PRIVATE ${BACKWARD_DEFINITIONS})
 target_include_directories(backward_object PRIVATE ${BACKWARD_INCLUDE_DIRS})
+if(BACKWARD_HAS_EXTERNAL_LIBRARIES)
+  target_link_libraries(backward_object PUBLIC ${BACKWARD_LIBRARIES})
+endif()
+# set CXX standard
+set_property(TARGET backward_object PROPERTY CXX_STANDARD_REQUIRED True)
+set_property(TARGET backward_object PROPERTY CXX_STANDARD 11)
+if (${COMPILER_IS_NVCC})
+  # GNU CXX extensions are not supported by nvcc
+  set_property(TARGET backward_object PROPERTY CXX_EXTENSIONS OFF)
+endif()
 set(BACKWARD_ENABLE $<TARGET_OBJECTS:backward_object> CACHE STRING
 	"Link with this object to setup backward automatically")
 
@@ -86,6 +88,18 @@ endif()
 add_library(backward ${libtype} backward.cpp)
 target_compile_definitions(backward PUBLIC ${BACKWARD_DEFINITIONS})
 target_include_directories(backward PUBLIC ${BACKWARD_INCLUDE_DIRS})
+if(BACKWARD_HAS_EXTERNAL_LIBRARIES)
+  target_link_libraries(backward PUBLIC ${BACKWARD_LIBRARIES})
+endif()
+# set CXX standard
+set_property(TARGET backward PROPERTY CXX_STANDARD_REQUIRED True)
+set_property(TARGET backward PROPERTY CXX_STANDARD 11)
+if (${COMPILER_IS_NVCC})
+  # GNU CXX extensions are not supported by nvcc
+  set_property(TARGET backward PROPERTY CXX_EXTENSIONS OFF)
+endif()
+
+add_library(Backward::Backward ALIAS backward)
 
 ###############################################################################
 # TESTS
