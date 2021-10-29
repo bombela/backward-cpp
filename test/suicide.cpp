@@ -58,7 +58,7 @@ void abort_abort_I_repeat_abort_abort() {
 TEST_ABORT(calling_abort) { abort_abort_I_repeat_abort_abort(); }
 
 // aarch64 and mips does not trap Division by zero
-#if !defined(__aarch64__) || !defined(__mips__)
+#if !defined(__aarch64__) && !defined(__mips__)
 volatile int zero = 0;
 
 int divide_by_zero() {
