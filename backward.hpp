@@ -1224,7 +1224,7 @@ public:
   }
 
   template <class ST> void load_stacktrace(ST &st) {
-    load_addresses(st.begin(), (int)st.size());
+    load_addresses(st.begin(), static_cast<int>(st.size()));
   }
 
   virtual ResolvedTrace resolve(ResolvedTrace t) { return t; }
@@ -4245,7 +4245,8 @@ public:
     printer.address = true;
     printer.print(st, stderr);
 
-#if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
+#if (defined(_XOPEN_SOURCE) && _XOPEN_SOURCE >= 700) || \
+    (defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L)
     psiginfo(info, nullptr);
 #else
     (void)info;
