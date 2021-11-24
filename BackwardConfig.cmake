@@ -79,7 +79,7 @@ if (STACK_WALKING_LIBUNWIND)
 
 	# Disable other unwinders if libunwind is found
 	set(STACK_WALKING_UNWIND FALSE)
-	set(STACK_WALKING_BACKTRACE FALSE)	
+	set(STACK_WALKING_BACKTRACE FALSE)
 endif()
 
 if (${STACK_DETAILS_AUTO_DETECT})
@@ -212,8 +212,13 @@ find_package_handle_standard_args(Backward
 )
 list(APPEND _BACKWARD_INCLUDE_DIRS ${BACKWARD_INCLUDE_DIR})
 
+# add_backward, optional bool argument; if passed and true, backward will be included as a system header
 macro(add_backward target)
-	target_include_directories(${target} PRIVATE ${BACKWARD_INCLUDE_DIRS})
+	if ("${ARGN}")
+		target_include_directories(${target} SYSTEM PRIVATE ${BACKWARD_INCLUDE_DIRS})
+	else()
+		target_include_directories(${target} PRIVATE ${BACKWARD_INCLUDE_DIRS})
+	endif()
 	set_property(TARGET ${target} APPEND PROPERTY COMPILE_DEFINITIONS ${BACKWARD_DEFINITIONS})
 	set_property(TARGET ${target} APPEND PROPERTY LINK_LIBRARIES ${BACKWARD_LIBRARIES})
 endmacro()
@@ -241,7 +246,7 @@ if (NOT TARGET Backward::Backward)
 	)
 	if(BACKWARD_HAS_EXTERNAL_LIBRARIES)
 		set_target_properties(Backward::Backward PROPERTIES
-			INTERFACE_LINK_LIBRARIES "${BACKWARD_LIBRARIES}" 
+			INTERFACE_LINK_LIBRARIES "${BACKWARD_LIBRARIES}"
 		)
 	endif()
 endif()
