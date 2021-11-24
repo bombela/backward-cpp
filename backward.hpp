@@ -3797,11 +3797,17 @@ public:
   }
 #endif
 
+  // Allow adding to paths gotten from BACKWARD_CXX_SOURCE_PREFIXES after loading the
+  // library; this can be useful when the library is loaded when the locations are unknown
+  static void add_paths_to_env_variable_impl(const std::string & to_add) {
+    get_mutable_paths_from_env_variable().push_back(to_add);
+  }
+
 private:
   details::handle<std::ifstream *, details::default_delete<std::ifstream *>>
       _file;
 
-  std::vector<std::string> get_paths_from_env_variable_impl() {
+  static std::vector<std::string> get_paths_from_env_variable_impl() {
     std::vector<std::string> paths;
     const char *prefixes_str = std::getenv("BACKWARD_CXX_SOURCE_PREFIXES");
     if (prefixes_str && prefixes_str[0]) {
@@ -3810,9 +3816,13 @@ private:
     return paths;
   }
 
-  const std::vector<std::string> &get_paths_from_env_variable() {
+  static std::vector<std::string> &get_mutable_paths_from_env_variable() {
     static std::vector<std::string> paths = get_paths_from_env_variable_impl();
     return paths;
+  }
+
+  static const std::vector<std::string> &get_paths_from_env_variable() {
+    return get_mutable_paths_from_env_variable();
   }
 
 #ifdef BACKWARD_ATLEAST_CXX11
