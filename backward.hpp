@@ -3819,7 +3819,7 @@ private:
 
   static std::vector<std::string> &get_mutable_paths_from_env_variable() {
     static volatile std::vector<std::string> paths = get_paths_from_env_variable_impl();
-    return paths;
+    return const_cast<std::vector<std::string>&>(paths);
   }
 
   static const std::vector<std::string> &get_paths_from_env_variable() {
