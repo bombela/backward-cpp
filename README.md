@@ -139,6 +139,11 @@ what I know).
 If you are missing debug information, the stack trace will lack details about
 your sources.
 
+When using clang++ with libdw, it may be necessary to compile with
+`-gdwarf-aranges` to make source locations visible. Libdw prefers to use a
+`.debug_aranges` section for source location information, which clang++ doesn't
+emit by default.
+
 ### Libraries to read the debug info
 
 Backward supports pretty printed stack traces on GNU/Linux, macOS and Windows,
