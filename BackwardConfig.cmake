@@ -89,8 +89,21 @@ if (${STACK_DETAILS_AUTO_DETECT})
 	# find libdw
 	find_path(LIBDW_INCLUDE_DIR NAMES "elfutils/libdw.h" "elfutils/libdwfl.h")
 	find_library(LIBDW_LIBRARY dw)
+	# in case it's statically linked, look for all the possible dependencies
+	find_library(LIBELF_LIBRARY elf)
+	find_library(LIBPTHREAD_LIBRARY pthread)
+	find_library(LIBZ_LIBRARY z)
+	find_library(LIBBZ2_LIBRARY bz2)
+	find_library(LIBLZMA_LIBRARY lzma)
+	find_library(LIBZSTD_LIBRARY zstd)
 	set(LIBDW_INCLUDE_DIRS ${LIBDW_INCLUDE_DIR} )
-	set(LIBDW_LIBRARIES ${LIBDW_LIBRARY} )
+	set(LIBDW_LIBRARIES ${LIBDW_LIBRARY}
+		$<$<BOOL:${LIBELF_LIBRARY}>:${LIBELF_LIBRARY}>
+		$<$<BOOL:${LIBPTHREAD_LIBRARY}>:${LIBPTHREAD_LIBRARY}>
+		$<$<BOOL:${LIBZ_LIBRARY}>:${LIBZ_LIBRARY}>
+		$<$<BOOL:${LIBBZ2_LIBRARY}>:${LIBBZ2_LIBRARY}>
+		$<$<BOOL:${LIBLZMA_LIBRARY}>:${LIBLZMA_LIBRARY}>
+		$<$<BOOL:${LIBZSTD_LIBRARY}>:${LIBZSTD_LIBRARY}>)
 	find_package_handle_standard_args(libdw ${_name_mismatched_arg}
 		REQUIRED_VARS LIBDW_LIBRARY LIBDW_INCLUDE_DIR)
 	mark_as_advanced(LIBDW_INCLUDE_DIR LIBDW_LIBRARY)
