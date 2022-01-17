@@ -282,6 +282,7 @@
 #include <dwarf.h>
 #include <libdwarf.h>
 #include <libelf.h>
+#include <libgen.h>
 #include <map>
 #endif
 
@@ -2269,7 +2270,7 @@ public:
     }
 
     trace.object_filename = resolve_exec_path(symbol_info);
-    dwarf_fileobject &fobj = load_object_with_dwarf(symbol_info.dli_fname);
+    dwarf_fileobject &fobj = load_object_with_dwarf(symbol_info.dli_fname, trace.object_filename);
     if (!fobj.dwarf_handle) {
       return trace; // sad, we couldn't load the object :(
     }
@@ -2429,7 +2430,7 @@ private:
     return strcmp(a, b) == 0;
   }
 
-  dwarf_fileobject &load_object_with_dwarf(const std::string &filename_object) {
+  dwarf_fileobject &load_object_with_dwarf(const std::string &filename_object, const std::string &object_filename) {
 
     if (!_dwarf_loaded) {
       // Set the ELF library operating version
@@ -2548,9 +2549,7 @@ private:
       ELF_GET_DATA(32)
     } else if (e_ident[EI_CLASS] == ELFCLASS64) {
       // libelf might have been built without 64 bit support
-#if __LIBELF64
       ELF_GET_DATA(64)
-#endif
     }
 
     if (!debuglink.empty()) {
@@ -2558,7 +2557,17 @@ private:
       // file instead. If we can't open the file, then return
       // the elf handle we had already opened.
       dwarf_file_t debuglink_file;
-      debuglink_file.reset(open(debuglink.c_str(), O_RDONLY));
+      {
+        char* object_filename_copy = strdup(object_filename.c_str());
+        const std::string directory_path = std::string(dirname(object_filename_copy));
+        free(object_filename_copy);
+        debuglink_file.reset(
+            open((directory_path + '/' + debuglink).c_str(), O_RDONLY));
+        if (debuglink_file.get() < 0) {
+          debuglink_file.reset(open(
+              (directory_path + "/.debug/" + debuglink).c_str(), O_RDONLY));
+        }
+      }
       if (debuglink_file.get() > 0) {
         dwarf_elf_t debuglink_elf;
         debuglink_elf.reset(elf_begin(debuglink_file.get(), ELF_C_READ, NULL));
