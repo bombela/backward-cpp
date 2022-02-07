@@ -211,6 +211,12 @@
 #else
 #include <link.h>
 #endif
+#if defined(__ppc__) || defined(__powerpc) || defined(__powerpc__) ||        \
+    defined(__POWERPC__)
+// Linux kernel header required for the struct pt_regs definition
+// to access the NIP (Next Instruction Pointer) register value
+#include <asm/ptrace.h>
+#endif
 #include <signal.h>
 #include <sys/stat.h>
 #include <syscall.h>
