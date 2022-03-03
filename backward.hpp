@@ -4033,7 +4033,6 @@ private:
 
 private:
   FILE *sink;
-  std::vector<char> buffer;
 };
 
 #ifdef BACKWARD_SYSTEM_LINUX
