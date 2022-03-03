@@ -4161,16 +4161,15 @@ public:
                                 sizeof posix_signals / sizeof posix_signals[0]);
   }
 
-  SignalHandling(const std::vector<int> &posix_signals = make_default_signals())
-      : _loaded(false) {
+  static bool installHandler(const std::vector<int> &posix_signals,
+                             void (*handler)(int, siginfo_t *, void *),
+                             char *altstack, size_t altstack_size) {
     bool success = true;
 
-    const size_t stack_size = 1024 * 1024 * 8;
-    _stack_content.reset(static_cast<char *>(malloc(stack_size)));
-    if (_stack_content) {
+    if (altstack) {
       stack_t ss;
-      ss.ss_sp = _stack_content.get();
-      ss.ss_size = stack_size;
+      ss.ss_sp = altstack;
+      ss.ss_size = altstack_size;
       ss.ss_flags = 0;
       if (sigaltstack(&ss, nullptr) < 0) {
         success = false;
@@ -4190,7 +4189,7 @@ public:
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
 #endif
-      action.sa_sigaction = &sig_handler;
+      action.sa_sigaction = handler;
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -4200,8 +4199,20 @@ public:
         success = false;
     }
 
-    _loaded = success;
+    return success;
   }
+
+  SignalHandling(const std::vector<int> &posix_signals,
+                 void (*handler)(int, siginfo_t *, void *))
+    : _loaded(false) {
+    const size_t stack_size = 1024 * 1024 * 8;
+    _stack_content.reset(static_cast<char *>(malloc(stack_size)));
+    _loaded = installHandler(posix_signals, handler, _stack_content.get(),
+                             stack_size);
+  }
+
+  SignalHandling(const std::vector<int> &posix_signals = make_default_signals())
+      : SignalHandling(posix_signals, sig_handler) {}
 
   bool loaded() const { return _loaded; }
 
