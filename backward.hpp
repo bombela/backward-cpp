@@ -3991,10 +3991,12 @@ public:
   bool object;
   int inliner_context_size;
   int trace_context_size;
+  bool reverse;
 
   Printer()
       : snippet(true), color_mode(ColorMode::automatic), address(false),
-        object(false), inliner_context_size(5), trace_context_size(7) {}
+        object(false), inliner_context_size(5), trace_context_size(7),
+        reverse(true) {}
 
   template <typename ST> FILE *print(ST &st, FILE *fp = stderr) {
     cfile_streambuf obuf(fp);
@@ -4041,8 +4043,14 @@ private:
   void print_stacktrace(ST &st, std::ostream &os, Colorize &colorize) {
     print_header(os, st.thread_id());
     _resolver.load_stacktrace(st);
-    for (size_t trace_idx = st.size(); trace_idx > 0; --trace_idx) {
-      print_trace(os, _resolver.resolve(st[trace_idx - 1]), colorize);
+    if ( reverse ) {
+      for (size_t trace_idx = st.size(); trace_idx > 0; --trace_idx) {
+        print_trace(os, _resolver.resolve(st[trace_idx - 1]), colorize);
+      }
+    } else {
+      for (size_t trace_idx = 0; trace_idx < st.size(); ++trace_idx) {
+        print_trace(os, _resolver.resolve(st[trace_idx]), colorize);
+      }
     }
   }
 
