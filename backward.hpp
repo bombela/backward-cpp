@@ -221,6 +221,13 @@
 #include <sys/stat.h>
 #include <syscall.h>
 #include <unistd.h>
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#undef _GNU_SOURCE
+#else
+#include <dlfcn.h>
+#endif
 
 #if BACKWARD_HAS_BFD == 1
 //              NOTE: defining PACKAGE{,_VERSION} is required before including
@@ -233,13 +240,6 @@
 #define PACKAGE_VERSION
 #endif
 #include <bfd.h>
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#include <dlfcn.h>
-#undef _GNU_SOURCE
-#else
-#include <dlfcn.h>
-#endif
 #endif
 
 #if BACKWARD_HAS_DW == 1
@@ -254,13 +254,6 @@
 #include <libdwarf.h>
 #include <libelf.h>
 #include <map>
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#include <dlfcn.h>
-#undef _GNU_SOURCE
-#else
-#include <dlfcn.h>
-#endif
 #endif
 
 #if (BACKWARD_HAS_BACKTRACE == 1) || (BACKWARD_HAS_BACKTRACE_SYMBOL == 1)
