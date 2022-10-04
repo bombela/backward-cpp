@@ -810,7 +810,12 @@ public:
     _index = -1;
     _depth = depth;
     _Unwind_Backtrace(&this->backtrace_trampoline, this);
-    return static_cast<size_t>(_index);
+    if (_index == -1) {
+      // _Unwind_Backtrace has failed to obtain any backtraces
+      return 0;
+    } else {
+      return static_cast<size_t>(_index);
+    }
   }
 
 private:
@@ -3614,11 +3619,11 @@ public:
     symOptions |= SYMOPT_LOAD_LINES | SYMOPT_UNDNAME;
     SymSetOptions(symOptions);
     EnumProcessModules(process, &module_handles[0],
-                       static_cast<DWORD>(module_handles.size() * sizeof(HMODULE)), 
+                       static_cast<DWORD>(module_handles.size() * sizeof(HMODULE)),
 		       &cbNeeded);
     module_handles.resize(cbNeeded / sizeof(HMODULE));
     EnumProcessModules(process, &module_handles[0],
-                       static_cast<DWORD>(module_handles.size() * sizeof(HMODULE)), 
+                       static_cast<DWORD>(module_handles.size() * sizeof(HMODULE)),
 		       &cbNeeded);
     std::transform(module_handles.begin(), module_handles.end(),
                    std::back_inserter(modules), get_mod_info(process));
