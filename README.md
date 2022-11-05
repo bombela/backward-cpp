@@ -49,6 +49,24 @@ If you are using CMake and want to use its configuration abilities to save
 you the trouble, you can easily integrate Backward, depending on how you obtained
 the library.
 
+#### With `FetchContent()`:
+
+If you are using a recent version of CMake, you can integrate `backward` via `FetchContent` like below:
+
+```cmake
+include(FetchContent)
+
+# Also requires one of: libbfd (gnu binutils), libdwarf, libdw (elfutils)
+FetchContent_Declare(backward
+        GIT_REPOSITORY https://github.com/bombela/backward-cpp
+        GIT_TAG v1.6)
+FetchContent_MakeAvailable(backward)
+
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
+add_executable(example ${SOURCES} ${BACKWARD_ENABLE}) # Notice the "BACKWARD_ENABLE" here
+add_backward(example)
+```
+
 #### As a subdirectory:
 
 In this case you have a subdirectory containing the whole repository of Backward
