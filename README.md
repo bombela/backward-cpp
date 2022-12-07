@@ -75,12 +75,9 @@ In this case you have a subdirectory containing the whole repository of Backward
 ```
 add_subdirectory(/path/to/backward-cpp)
 
-# This will add backward.cpp to your target
-add_executable(mytarget mysource.cpp ${BACKWARD_ENABLE})
-
 # This will add libraries, definitions and include directories needed by backward
-# by setting each property on the target.
-add_backward(mytarget)
+# through an ALIAS target.
+target_link_libraries(mytarget PUBLIC Backward::Backward)
 ```
 
 #### Modifying CMAKE_MODULE_PATH
