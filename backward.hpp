@@ -2677,7 +2677,7 @@ private:
     Dwarf_Error error = DW_DLE_NE;
     Dwarf_Debug dwarf = fobj.dwarf_handle.get();
     bool has_lowpc = false;
-    bool has_highpc = false;
+    // unnecessary bool has_highpc = false;
     bool has_ranges = false;
 
     if (dwarf_lowpc(die, &low_pc, &error) == DW_DLV_OK) {
@@ -2691,7 +2691,7 @@ private:
         // We do have a high pc. In DWARF 4+ this is an offset from the
         // low pc, but in earlier versions it's an absolute address.
 
-        has_highpc = true;
+        // has_highpc = true;
         // In DWARF 2/3 this would be a DW_FORM_CLASS_ADDRESS
         if (return_class == DW_FORM_CLASS_CONSTANT) {
           high_pc = low_pc + high_pc;
@@ -2745,7 +2745,7 @@ private:
     // If we don't have lowpc, highpc and ranges maybe this DIE is a
     // declaration that relies on a DW_AT_specification DIE that happens
     // later. Use the specification cache we filled when we loaded this CU.
-    if (!result && (!has_lowpc && !has_highpc && !has_ranges)) {
+    if (!result && (!has_lowpc /*&& !has_highpc*/ && !has_ranges)) {
       Dwarf_Die spec_die = get_spec_die(fobj, die);
       if (spec_die) {
         result = die_has_pc(fobj, spec_die, pc);
