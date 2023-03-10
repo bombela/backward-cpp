@@ -86,6 +86,11 @@ endif()
 add_library(backward ${libtype} backward.cpp)
 target_compile_definitions(backward PUBLIC ${BACKWARD_DEFINITIONS})
 target_include_directories(backward PUBLIC ${BACKWARD_INCLUDE_DIRS})
+if(BACKWARD_HAS_EXTERNAL_LIBRARIES)
+    set_target_properties(backward PROPERTIES
+                                   INTERFACE_LINK_LIBRARIES "${BACKWARD_LIBRARIES}")
+endif()
+add_library(Backward::Backward ALIAS backward)
 
 ###############################################################################
 # TESTS
