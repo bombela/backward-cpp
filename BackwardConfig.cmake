@@ -203,11 +203,18 @@ if (NOT _BACKWARD_DEFINITIONS)
 endif()
 
 if(WIN32)
-    list(APPEND _BACKWARD_LIBRARIES dbghelp psapi)
+	list(APPEND _BACKWARD_LIBRARIES dbghelp psapi)
 	if(MINGW)
-	    set(MINGW_MSVCR_LIBRARY "msvcr90$<$<CONFIG:DEBUG>:d>" CACHE STRING "Mingw MSVC runtime import library")
-	    list(APPEND _BACKWARD_LIBRARIES ${MINGW_MSVCR_LIBRARY})
-	endif()
+		include(CheckCXXCompilerFlag)
+		check_cxx_compiler_flag(-gcodeview SUPPORT_WINDOWS_DEBUG_INFO)	
+		if(SUPPORT_WINDOWS_DEBUG_INFO)
+			set(CMAKE_EXE_LINKER_FLAGS "-Wl,--pdb= ")
+			add_compile_options(-gcodeview)
+		else()
+			set(MINGW_MSVCR_LIBRARY "msvcr90$<$<CONFIG:DEBUG>:d>" CACHE STRING "Mingw MSVC runtime import library")
+			list(APPEND _BACKWARD_LIBRARIES ${MINGW_MSVCR_LIBRARY})
+		endif()
+	endif()	
 endif()
 
 set(BACKWARD_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}")
@@ -221,7 +228,7 @@ endif()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(Backward
-    REQUIRED_VARS ${FIND_PACKAGE_REQUIRED_VARS}
+	REQUIRED_VARS ${FIND_PACKAGE_REQUIRED_VARS}
 )
 list(APPEND _BACKWARD_INCLUDE_DIRS ${BACKWARD_INCLUDE_DIR})
 
@@ -244,18 +251,18 @@ mark_as_advanced(BACKWARD_INCLUDE_DIRS BACKWARD_DEFINITIONS BACKWARD_LIBRARIES)
 # Expand each definition in BACKWARD_DEFINITIONS to its own cmake var and export
 # to outer scope
 foreach(var ${BACKWARD_DEFINITIONS})
-  string(REPLACE "=" ";" var_as_list ${var})
-  list(GET var_as_list 0 var_name)
-  list(GET var_as_list 1 var_value)
-  set(${var_name} ${var_value})
-  mark_as_advanced(${var_name})
+	string(REPLACE "=" ";" var_as_list ${var})
+	list(GET var_as_list 0 var_name)
+	list(GET var_as_list 1 var_value)
+	set(${var_name} ${var_value})
+	mark_as_advanced(${var_name})
 endforeach()
 
 if (NOT TARGET Backward::Backward)
 	add_library(Backward::Backward INTERFACE IMPORTED)
 	set_target_properties(Backward::Backward PROPERTIES
-	    INTERFACE_INCLUDE_DIRECTORIES "${BACKWARD_INCLUDE_DIRS}"
-	    INTERFACE_COMPILE_DEFINITIONS "${BACKWARD_DEFINITIONS}"
+		INTERFACE_INCLUDE_DIRECTORIES "${BACKWARD_INCLUDE_DIRS}"
+		INTERFACE_COMPILE_DEFINITIONS "${BACKWARD_DEFINITIONS}"
 	)
 	if(BACKWARD_HAS_EXTERNAL_LIBRARIES)
 		set_target_properties(Backward::Backward PROPERTIES
