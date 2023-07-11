@@ -330,10 +330,10 @@
 #endif
 #endif // defined(BACKWARD_SYSTEM_DARWIN)
 
+#include <mutex>
 #if defined(BACKWARD_SYSTEM_WINDOWS)
 
 #include <condition_variable>
-#include <mutex>
 #include <thread>
 
 #include <basetsd.h>
@@ -4287,12 +4287,14 @@ public:
 private:
   details::handle<char *> _stack_content;
   bool _loaded;
+  static std::recursive_mutex _mu;
 
 #ifdef __GNUC__
   __attribute__((noreturn))
 #endif
   static void
   sig_handler(int signo, siginfo_t *info, void *_ctx) {
+    std::lock_guard lk(_mu);
     handleSignal(signo, info, _ctx);
 
     // try to forward the signal.
