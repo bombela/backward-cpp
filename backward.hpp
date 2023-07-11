@@ -4209,7 +4209,7 @@ public:
       struct sigaction action;
       memset(&action, 0, sizeof action);
       action.sa_flags =
-          static_cast<int>(SA_SIGINFO | SA_ONSTACK | SA_NODEFER | SA_RESETHAND);
+          static_cast<int>(SA_SIGINFO | SA_ONSTACK | SA_NODEFER);
       sigfillset(&action.sa_mask);
       sigdelset(&action.sa_mask, posix_signals[i]);
 #if defined(__clang__)
