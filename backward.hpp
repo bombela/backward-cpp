@@ -4287,7 +4287,7 @@ public:
 private:
   details::handle<char *> _stack_content;
   bool _loaded;
-  static std::recursive_mutex _mu;
+  static std::mutex _mu;
 
 #ifdef __GNUC__
   __attribute__((noreturn))
@@ -4297,8 +4297,6 @@ private:
     std::lock_guard lk(_mu);
     handleSignal(signo, info, _ctx);
 
-    // try to forward the signal.
-    raise(info->si_signo);
 
     // terminate the process immediately.
     puts("watf? exit");
