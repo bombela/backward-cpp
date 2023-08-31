@@ -216,7 +216,10 @@ if(WIN32)
 	endif()	
 endif()
 
-set(BACKWARD_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+set(BACKWARD_INCLUDE_DIR
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+	$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 
 set(BACKWARD_HAS_EXTERNAL_LIBRARIES FALSE)
 set(FIND_PACKAGE_REQUIRED_VARS BACKWARD_INCLUDE_DIR)
@@ -233,6 +236,9 @@ list(APPEND _BACKWARD_INCLUDE_DIRS ${BACKWARD_INCLUDE_DIR})
 
 # add_backward, optional bool argument; if passed and true, backward will be included as a system header
 macro(add_backward target)
+	message(DEPRECATION "The add_backward() macro is deprecated, use target_link_libraries() to link to "
+	        "one of the exported targets: Backward::Interface, Backward::Object, or Backward::Backward."
+	)
 	if ("${ARGN}")
 		target_include_directories(${target} SYSTEM PRIVATE ${BACKWARD_INCLUDE_DIRS})
 	else()
@@ -242,7 +248,7 @@ macro(add_backward target)
 	set_property(TARGET ${target} APPEND PROPERTY LINK_LIBRARIES ${BACKWARD_LIBRARIES})
 endmacro()
 
-set(BACKWARD_INCLUDE_DIRS ${_BACKWARD_INCLUDE_DIRS} CACHE INTERNAL "_BACKWARD_INCLUDE_DIRS")
+set(BACKWARD_INCLUDE_DIRS ${_BACKWARD_INCLUDE_DIRS} CACHE INTERNAL "BACKWARD_INCLUDE_DIRS")
 set(BACKWARD_DEFINITIONS ${_BACKWARD_DEFINITIONS} CACHE INTERNAL "BACKWARD_DEFINITIONS")
 set(BACKWARD_LIBRARIES ${_BACKWARD_LIBRARIES} CACHE INTERNAL "BACKWARD_LIBRARIES")
 mark_as_advanced(BACKWARD_INCLUDE_DIRS BACKWARD_DEFINITIONS BACKWARD_LIBRARIES)
@@ -257,15 +263,8 @@ foreach(var ${BACKWARD_DEFINITIONS})
 	mark_as_advanced(${var_name})
 endforeach()
 
-if (NOT TARGET Backward::Backward)
-	add_library(Backward::Backward INTERFACE IMPORTED)
-	set_target_properties(Backward::Backward PROPERTIES
-		INTERFACE_INCLUDE_DIRECTORIES "${BACKWARD_INCLUDE_DIRS}"
-		INTERFACE_COMPILE_DEFINITIONS "${BACKWARD_DEFINITIONS}"
-	)
-	if(BACKWARD_HAS_EXTERNAL_LIBRARIES)
-		set_target_properties(Backward::Backward PROPERTIES
-			INTERFACE_LINK_LIBRARIES "${BACKWARD_LIBRARIES}"
-		)
-	endif()
+# if this file is used from the install tree by find_package(), include the
+# file CMake-generated file where the targets are defined
+if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/BackwardTargets.cmake)
+	include(${CMAKE_CURRENT_LIST_DIR}/BackwardTargets.cmake)
 endif()
