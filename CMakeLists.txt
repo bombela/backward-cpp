@@ -31,6 +31,22 @@ include(GNUInstallDirs)
 
 include(BackwardConfig.cmake)
 
+###############################################################################
+# OPTIONS
+###############################################################################
+
+option(BACKWARD_SHARED "Build backward as a shared library" OFF)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT DEFINED BACKWARD_TESTS)
+	# If this is a top level CMake project, we most lixely want the tests
+	set(BACKWARD_TESTS ON CACHE BOOL "Enable tests")
+else()
+	set(BACKWARD_TESTS OFF CACHE BOOL "Enable tests")
+endif()
+
+###############################################################################
+# COMPILER FLAGS
+###############################################################################
+
 # check if compiler is nvcc or nvcc_wrapper
 set(COMPILER_IS_NVCC false)
 get_filename_component(COMPILER_NAME ${CMAKE_CXX_COMPILER} NAME)
@@ -51,10 +67,6 @@ if (${COMPILER_IS_NVCC})
   # GNU CXX extensions are not supported by nvcc
   set(CMAKE_CXX_EXTENSIONS OFF)
 endif()
-
-###############################################################################
-# COMPILER FLAGS
-###############################################################################
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_COMPILER_IS_GNUCXX)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
@@ -78,8 +90,8 @@ set(BACKWARD_ENABLE $<TARGET_OBJECTS:backward_object> CACHE STRING
 ###############################################################################
 # BACKWARD LIBRARY (Includes backward.cpp)
 ###############################################################################
-option(BACKWARD_SHARED "Build dynamic backward-cpp shared lib" OFF)
 
+set(libtype STATIC)
 if(BACKWARD_SHARED)
     set(libtype SHARED)
 endif()
