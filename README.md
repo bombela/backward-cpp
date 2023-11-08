@@ -407,6 +407,9 @@ this object doesn't do anything. It exposes only one method:
 bool loaded() const // true if loaded with success
 ```
 
+**Warning:** The registered signal handlers are not signal safe and problems can
+arise from using this.
+
 ### Trace object
 
 To keep the memory footprint of a loaded `StackTrace` on the low-side, there a
