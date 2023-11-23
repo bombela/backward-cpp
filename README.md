@@ -422,8 +422,8 @@ struct ResolvedTrace: public Trace {
 	struct SourceLoc {
 		std::string function;
 		std::string filename;
-		size_t      line;
-		size_t      col;
+		unsigned    line;
+		unsigned    col;
 	};
 
 	// In which binary object this trace is located.
