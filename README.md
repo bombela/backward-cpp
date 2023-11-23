@@ -407,8 +407,11 @@ this object doesn't do anything. It exposes only one method:
 bool loaded() const // true if loaded with success
 ```
 
-**Warning:** The registered signal handlers are not signal safe and problems can
-arise from using this.
+**Warning:** The registered signal handlers are not
+[signal safe](https://www.man7.org/linux/man-pages/man7/signal-safety.7.html),
+mostly because backward-cpp and the DWARF decoding libraries are using `malloc`.
+In case a signal is raised while malloc is holding a lock, a deadlock will
+occur.
 
 ### Trace object
 
