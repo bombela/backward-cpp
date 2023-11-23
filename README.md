@@ -1,4 +1,4 @@
-Backward-cpp [![badge](https://img.shields.io/badge/conan.io-backward%2F1.3.0-green.svg?logo=data:image/png;base64%2CiVBORw0KGgoAAAANSUhEUgAAAA4AAAAOCAMAAAAolt3jAAAA1VBMVEUAAABhlctjlstkl8tlmMtlmMxlmcxmmcxnmsxpnMxpnM1qnc1sn85voM91oM11oc1xotB2oc56pNF6pNJ2ptJ8ptJ8ptN9ptN8p9N5qNJ9p9N9p9R8qtOBqdSAqtOAqtR%2BrNSCrNJ/rdWDrNWCsNWCsNaJs9eLs9iRvNuVvdyVv9yXwd2Zwt6axN6dxt%2Bfx%2BChyeGiyuGjyuCjyuGly%2BGlzOKmzOGozuKoz%2BKqz%2BOq0OOv1OWw1OWw1eWx1eWy1uay1%2Baz1%2Baz1%2Bez2Oe02Oe12ee22ujUGwH3AAAAAXRSTlMAQObYZgAAAAFiS0dEAIgFHUgAAAAJcEhZcwAACxMAAAsTAQCanBgAAAAHdElNRQfgBQkREyOxFIh/AAAAiklEQVQI12NgAAMbOwY4sLZ2NtQ1coVKWNvoc/Eq8XDr2wB5Ig62ekza9vaOqpK2TpoMzOxaFtwqZua2Bm4makIM7OzMAjoaCqYuxooSUqJALjs7o4yVpbowvzSUy87KqSwmxQfnsrPISyFzWeWAXCkpMaBVIC4bmCsOdgiUKwh3JojLgAQ4ZCE0AMm2D29tZwe6AAAAAElFTkSuQmCC)](http://www.conan.io/source/backward/1.3.0/Manu343726/testing)
+Backward-cpp [![Conan Center](https://img.shields.io/conan/v/backward-cpp)](https://conan.io/center/recipes/backward-cpp)
 ============
 
 Backward is a beautiful stack trace pretty printer for C++.
@@ -45,9 +45,25 @@ Note for [folly](https://github.com/facebook/folly) library users: must define `
 
 ### Integration with CMake
 
-If you are using CMake and want to use its configuration abilities to save
-you the trouble, you can easily integrate Backward, depending on how you obtained
+If you are using CMake and want to use its configuration abilities to save you
+the trouble, you can easily integrate Backward, depending on how you obtained
 the library.
+
+Notice that all approaches are equivalent in the way Backward is added to a
+CMake target, the difference is in how CMake is pointed to the Backward
+sources. Backward defines three targets:
+
+- `Backward::Interface` is an interface target that brings compiler definition
+  flags, include directory, and external libraries. This is all you need to use
+  the `backward.hpp` header library.
+- `Backward::Object` brings `Backward::Interface` and `backward.cpp` as an
+  `OBJECT` CMake library. This target cannot be exported, so it is not
+  available when Backward is used via `find_package`.
+- `Backward::Backward` brings `Backward::Interface` and `backward.cpp` as
+  either `STATIC` or `SHARED` library (depending on the `BACKWARD_SHARED`
+  option). This target is exported and always available, however note that the
+  linker will not include unused objects from a static library, unless the
+  `-Wl,--whole-archive` option (or similar) is used.
 
 #### With `FetchContent()`:
 
@@ -58,32 +74,30 @@ include(FetchContent)
 
 # Also requires one of: libbfd (gnu binutils), libdwarf, libdw (elfutils)
 FetchContent_Declare(backward
-        GIT_REPOSITORY https://github.com/bombela/backward-cpp
-        GIT_TAG v1.6)
+    GIT_REPOSITORY https://github.com/bombela/backward-cpp
+    GIT_TAG master  # or a version tag, such as v1.6
+    SYSTEM          # optional, the Backward include directory will be treated as system directory
+)
 FetchContent_MakeAvailable(backward)
 
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
-add_executable(example ${SOURCES} ${BACKWARD_ENABLE}) # Notice the "BACKWARD_ENABLE" here
-add_backward(example)
+# Add Backward to your target (either Backward::Interface, Backward::Object, or Backward::Backward)
+target_link_libraries(mytarget PUBLIC Backward::Interface)
 ```
 
 #### As a subdirectory:
 
 In this case you have a subdirectory containing the whole repository of Backward
-(eg.: using git-submodules), in this case you can do:
+(e.g. using [git-submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules)),
+in this case you can do:
 
-```
+```cmake
 add_subdirectory(/path/to/backward-cpp)
 
-# This will add backward.cpp to your target
-add_executable(mytarget mysource.cpp ${BACKWARD_ENABLE})
-
-# This will add libraries, definitions and include directories needed by backward
-# by setting each property on the target.
-add_backward(mytarget)
+# Add Backward to your target (either Backward::Interface, Backward::Object, or Backward::Backward)
+target_link_libraries(mytarget PUBLIC Backward::Interface)
 ```
 
-#### Modifying CMAKE_MODULE_PATH
+#### Modifying `CMAKE_MODULE_PATH`:
 
 In this case you can have Backward installed as a subdirectory:
 
@@ -91,13 +105,9 @@ In this case you can have Backward installed as a subdirectory:
 list(APPEND CMAKE_MODULE_PATH /path/to/backward-cpp)
 find_package(Backward)
 
-# This will add libraries, definitions and include directories needed by backward
-# through an IMPORTED target.
-target_link_libraries(mytarget PUBLIC Backward::Backward)
+# Add Backward to your target (either Backward::Interface or Backward::Backward)
+target_link_libraries(mytarget PUBLIC Backward::Interface)
 ```
-
-Notice that this is equivalent to using the the approach that uses `add_subdirectory()`,
-however it uses cmake's [imported target](https://cmake.org/Wiki/CMake/Tutorials/Exporting_and_Importing_Targets) mechanism.
 
 #### Installation through a regular package manager
 
@@ -109,10 +119,10 @@ Packages currently available:
 ```
 find_package(Backward)
 
-# This will add libraries, definitions and include directories needed by backward
-# through an IMPORTED target.
-target_link_libraries(mytarget PUBLIC Backward::Backward)
+# Add Backward to your target (either Backward::Interface or Backward::Backward)
+target_link_libraries(mytarget PUBLIC Backward::Interface)
 ```
+
 ### Libraries to unwind the stack
 
 On Linux and macOS, backtrace can back-trace or "walk" the stack using the
@@ -422,8 +432,8 @@ struct ResolvedTrace: public Trace {
 	struct SourceLoc {
 		std::string function;
 		std::string filename;
-		size_t      line;
-		size_t      col;
+		unsigned    line;
+		unsigned    col;
 	};
 
 	// In which binary object this trace is located.
