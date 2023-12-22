@@ -4148,8 +4148,8 @@ private:
   void print_source_loc(std::ostream &os, const char *indent,
                         const ResolvedTrace::SourceLoc &source_loc,
                         void *addr = nullptr) {
-    os << indent << "Source \"" << source_loc.filename << "\", line "
-       << source_loc.line << ", in " << source_loc.function;
+    os << indent << "Source \"" << source_loc.filename << ":" << source_loc.line 
+       << "\", in " << source_loc.function;
 
     if (address && addr != nullptr) {
       os << " [" << addr << "]";
