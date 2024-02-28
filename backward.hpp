@@ -3941,7 +3941,7 @@ private:
 #ifdef BACKWARD_SYSTEM_LINUX
 
 namespace Color {
-enum type { yellow = 33, purple = 35, reset = 39 };
+enum type { yellow = 33, purple = 35, red = 31, reset = 39 };
 } // namespace Color
 
 class Colorize {
@@ -3981,8 +3981,46 @@ private:
 
 #else // ndef BACKWARD_SYSTEM_LINUX
 
+#ifdef BACKWARD_SYSTEM_WINDOWS
+
 namespace Color {
-enum type { yellow = 0, purple = 0, reset = 0 };
+enum type { yellow = 33, purple = 35, red = 31, reset = 0 };
+} // namespace Color
+
+class Colorize {
+public:
+  Colorize(std::ostream &os) : _os(os), _reset(false), _enabled(false) {}
+  void activate(ColorMode::type mode) { _enabled = mode == ColorMode::always; }
+  void activate(ColorMode::type mode, FILE *fp) { activate(mode, fileno(fp)); }
+  void set_color(Color::type ccode) {
+    if (!_enabled)
+      return;
+
+    // I assume that the terminal can handle basic colors. Seriously I
+    // don't want to deal with all the termcap shit.
+    _os << "\x1B[" << static_cast<int>(ccode) << "m";
+    _reset = (ccode != Color::reset);
+  }
+
+  ~Colorize() {
+    if (_reset) {
+      set_color(Color::reset);
+    }
+  }
+
+private:
+  void activate(ColorMode::type mode, int fd) {
+    activate(mode == ColorMode::automatic ? ColorMode::always : mode);
+  }
+  std::ostream &_os;
+  bool _reset;
+  bool _enabled;
+};
+
+#else // ndef BACKWARD_SYSTEM_WINDOWS
+
+namespace Color {
+enum type { yellow = 0, purple = 0, red = 0, reset = 0 };
 } // namespace Color
 
 class Colorize {
@@ -3993,6 +4031,7 @@ public:
   void set_color(Color::type) {}
 };
 
+#endif // BACKWARD_SYSTEM_WINDOWS
 #endif // BACKWARD_SYSTEM_LINUX
 
 class Printer {
@@ -4101,7 +4140,7 @@ private:
       }
       const ResolvedTrace::SourceLoc &inliner_loc =
           trace.inliners[inliner_idx - 1];
-      print_source_loc(os, " | ", inliner_loc);
+      print_source_loc(os, " | ", inliner_loc, colorize, Color::red);
       if (snippet) {
         print_snippet(os, "    | ", inliner_loc, colorize, Color::purple,
                       inliner_context_size);
@@ -4113,7 +4152,8 @@ private:
       if (!already_indented) {
         os << "   ";
       }
-      print_source_loc(os, "   ", trace.source, trace.addr);
+      print_source_loc(os, "   ", trace.source, colorize, Color::red,
+                       trace.addr);
       if (snippet) {
         print_snippet(os, "      ", trace.source, colorize, Color::yellow,
                       trace_context_size);
@@ -4147,9 +4187,12 @@ private:
 
   void print_source_loc(std::ostream &os, const char *indent,
                         const ResolvedTrace::SourceLoc &source_loc,
+                        Colorize &colorize, Color::type color_code,
                         void *addr = nullptr) {
+    colorize.set_color(color_code);
     os << indent << "Source \"" << source_loc.filename << "\", line "
        << source_loc.line << ", in " << source_loc.function;
+    colorize.set_color(Color::reset);
 
     if (address && addr != nullptr) {
       os << " [" << addr << "]";
