@@ -23,6 +23,9 @@
 cmake_minimum_required(VERSION 3.14)
 project(backward CXX)
 
+# https://cmake.org/cmake/help/latest/variable/PROJECT_IS_TOP_LEVEL.html
+string(COMPARE EQUAL ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR} PROJECT_IS_TOP_LEVEL)
+
 # Introduce variables:
 # * CMAKE_INSTALL_LIBDIR
 # * CMAKE_INSTALL_BINDIR
@@ -35,13 +38,17 @@ include(BackwardConfig.cmake)
 # OPTIONS
 ###############################################################################
 
+include(CMakeDependentOption)
+
 option(BACKWARD_SHARED "Build backward as a shared library" OFF)
+option
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT DEFINED BACKWARD_TESTS)
 	# If this is a top level CMake project, we most lixely want the tests
 	set(BACKWARD_TESTS ON CACHE BOOL "Enable tests")
 else()
 	set(BACKWARD_TESTS OFF CACHE BOOL "Enable tests")
 endif()
+cmake_dependent_option(BACKWARD_INSTALL "Install backward." ${PROJECT_IS_TOP_LEVEL} "NOT BACKWARD_SHARED" ON)
 
 ###############################################################################
 # COMPILER FLAGS
@@ -157,20 +164,22 @@ if(BACKWARD_TESTS)
 	endforeach()
 endif()
 
-install(
-    FILES "backward.hpp"
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
-install(
-    FILES "BackwardConfig.cmake"
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
-)
-# check if Backward is being used as a top-level project or included as a subproject
-if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-    # export the targets (note that exporting backward_object does not make sense)
-    install(TARGETS backward_interface backward EXPORT BackwardTargets)
-    # install a CMake file for the exported targets
-    install(EXPORT BackwardTargets
-            NAMESPACE Backward::
-            DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
+if(BACKWARD_INSTALL)
+	install(
+	    FILES "backward.hpp"
+	    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+	)
+	install(
+	    FILES "BackwardConfig.cmake"
+	    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+	)
+	# check if Backward is being used as a top-level project or included as a subproject
+	if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+	    # export the targets (note that exporting backward_object does not make sense)
+	    install(TARGETS backward_interface backward EXPORT BackwardTargets)
+	    # install a CMake file for the exported targets
+	    install(EXPORT BackwardTargets
+	            NAMESPACE Backward::
+	            DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
+	endif()
 endif()
