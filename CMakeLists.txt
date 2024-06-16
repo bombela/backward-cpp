@@ -41,7 +41,6 @@ include(BackwardConfig.cmake)
 include(CMakeDependentOption)
 
 option(BACKWARD_SHARED "Build backward as a shared library" OFF)
-option
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT DEFINED BACKWARD_TESTS)
 	# If this is a top level CMake project, we most lixely want the tests
 	set(BACKWARD_TESTS ON CACHE BOOL "Enable tests")
