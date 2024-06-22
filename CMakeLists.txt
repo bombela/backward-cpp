@@ -165,13 +165,10 @@ if(BACKWARD_INSTALL)
 	    FILES "BackwardConfig.cmake"
 	    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
 	)
-	# check if Backward is being used as a top-level project or included as a subproject
-	if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-	    # export the targets (note that exporting backward_object does not make sense)
-	    install(TARGETS backward_interface backward EXPORT BackwardTargets)
-	    # install a CMake file for the exported targets
-	    install(EXPORT BackwardTargets
-	            NAMESPACE Backward::
-	            DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
-	endif()
+	# export the targets (note that exporting backward_object does not make sense)
+	install(TARGETS backward_interface backward EXPORT BackwardTargets)
+	# install a CMake file for the exported targets
+	install(EXPORT BackwardTargets
+	        NAMESPACE Backward::
+	        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
 endif()
