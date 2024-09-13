@@ -3633,6 +3633,10 @@ public:
     image_type = h->FileHeader.Machine;
   }
 
+  ~TraceResolverImpl() {
+    SymCleanup(GetCurrentProcess());
+  }
+
   static const int max_sym_len = 255;
   struct symbol_t {
     SYMBOL_INFO sym;
