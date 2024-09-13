@@ -4426,7 +4426,14 @@ private:
     abort();
   }
 
+  static EXCEPTION_RECORD &exc_rec() {
+    static EXCEPTION_RECORD data{0};
+    return data;
+  }
+
   NOINLINE static LONG WINAPI crash_handler(EXCEPTION_POINTERS *info) {
+    exc_rec() = *(info->ExceptionRecord);
+
     // The exception info supplies a trace from exactly where the issue was,
     // no need to skip records
     crash_handler(0, info->ContextRecord);
@@ -4460,6 +4467,17 @@ private:
   }
 
   static void handle_stacktrace(int skip_frames = 0) {
+    if(exc_rec().ExceptionCode || exc_rec().ExceptionAddress) {
+      std::cerr << "EXCEPTION 0x" << std::hex << exc_rec().ExceptionCode << " @ 0x" << std::hex << exc_rec().ExceptionAddress << std::dec << std::endl;
+      if(exc_rec().NumberParameters) {
+        std::cerr << "Exception params: ";
+        for(auto i = 0; i < exc_rec().NumberParameters; i++) {
+          std::cerr << "#" << i << "=0x" << std::hex << exc_rec().ExceptionInformation[i] << std::dec << " ";
+        }
+        std::cerr << std::endl;
+      }
+    }
+
     // printer creates the TraceResolver, which can supply us a machine type
     // for stack walking. Without this, StackTrace can only guess using some
     // macros.
