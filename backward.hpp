@@ -740,6 +740,9 @@ public:
   void skip_n_firsts(size_t n) { _skip = n; }
 
 protected:
+  void load_saved(void** arr, size_t sz, std::vector<void*>& v) {
+    copy(&arr[0], &arr[sz], back_inserter(v));
+  }
   void load_thread_info() {
 #ifdef BACKWARD_SYSTEM_LINUX
 #ifndef __ANDROID__
@@ -880,6 +883,9 @@ public:
     _stacktrace.resize(trace_cnt);
     skip_n_firsts(0);
     return size();
+  }
+  void load_saved(void** arr, size_t sz) {
+    StackTraceImplBase::load_saved(arr, sz, _stacktrace);
   }
   size_t load_from(void *addr, size_t depth = 32, void *context = nullptr,
                    void *error_addr = nullptr) {
@@ -1065,6 +1071,10 @@ public:
     return size();
   }
 
+  void load_saved(void** arr, size_t sz) {
+    StackTraceImplBase::load_saved(arr, sz, _stacktrace);
+  }
+
   size_t load_from(void *addr, size_t depth = 32, void *context = nullptr,
                    void *error_addr = nullptr) {
     load_here(depth + 8, context, error_addr);
@@ -1101,6 +1111,10 @@ public:
     _stacktrace.resize(trace_cnt);
     skip_n_firsts(1);
     return size();
+  }
+
+  void load_saved(void** arr, size_t sz) {
+    StackTraceImplBase::load_saved(arr, sz, _stacktrace);
   }
 
   size_t load_from(void *addr, size_t depth = 32, void *context = nullptr,
@@ -1195,6 +1209,10 @@ public:
     }
 
     return size();
+  }
+
+  void load_saved(void** arr, size_t sz) {
+    StackTraceImplBase::load_saved(arr, sz, _stacktrace);
   }
 
   size_t load_from(void *addr, size_t depth = 32, void *context = nullptr,
