@@ -954,7 +954,7 @@ public:
           reinterpret_cast<void *>(uctx->uc_mcontext.gregs[REG_EIP]);
       ++index;
       ctx = *reinterpret_cast<unw_context_t *>(uctx);
-#elif defined(__arm__)
+#elif defined(__arm__)     // clang libunwind/arm
       // libunwind uses its own context type for ARM unwinding.
       // Copy the registers from the signal handler's context so we can
       // unwind
@@ -984,6 +984,24 @@ public:
             uctx->uc_mcontext.arm_lr - sizeof(unsigned long);
       }
       _stacktrace[index] = reinterpret_cast<void *>(ctx.regs[UNW_ARM_R15]);
+      ++index;
+#elif defined(__aarch64__) // gcc libunwind/arm64
+      unw_getcontext(&ctx);
+      // If the IP is the same as the crash address we have a bad function
+      // dereference The caller's address is pointed to by the link pointer, so
+      // we dereference that value and set it to be the next frame's IP.
+      if (uctx->uc_mcontext.pc == reinterpret_cast<__uint64_t>(error_addr())) {
+        uctx->uc_mcontext.pc = uctx->uc_mcontext.regs[UNW_TDEP_IP];
+      }
+
+      // 29 general purpose registers
+      for (int i = UNW_AARCH64_X0; i <= UNW_AARCH64_X28; i++) {
+        ctx.uc_mcontext.regs[i] = uctx->uc_mcontext.regs[i];
+      }
+      ctx.uc_mcontext.sp = uctx->uc_mcontext.sp;
+      ctx.uc_mcontext.pc = uctx->uc_mcontext.pc;
+      ctx.uc_mcontext.fault_address = uctx->uc_mcontext.fault_address;
+      _stacktrace[index] = reinterpret_cast<void *>(ctx.uc_mcontext.pc);
       ++index;
 #elif defined(__APPLE__) && defined(__x86_64__)
       unw_getcontext(&ctx);
