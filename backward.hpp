@@ -4351,8 +4351,7 @@ public:
           }
           cv().notify_one();
         }) {
-    SetUnhandledExceptionFilter(crash_handler);
-
+    *prev_exception_filter_ptr() = SetUnhandledExceptionFilter(crash_handler);
     signal(SIGABRT, signal_handler);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 
@@ -4380,6 +4379,11 @@ private:
   static CONTEXT *ctx() {
     static CONTEXT data;
     return &data;
+  }
+
+  static LPTOP_LEVEL_EXCEPTION_FILTER *prev_exception_filter_ptr() {
+    static LPTOP_LEVEL_EXCEPTION_FILTER prev_exception_filter;
+    return &prev_exception_filter;
   }
 
   enum class crash_status { running, crashed, normal_exit, ending };
@@ -4445,6 +4449,11 @@ private:
   }
 
   NOINLINE static LONG WINAPI crash_handler(EXCEPTION_POINTERS *info) {
+    // Pass-through MSVC exceptions
+    if ((*prev_exception_filter_ptr()) != nullptr &&
+        info->ExceptionRecord->ExceptionCode == 0xE06D7363) {
+      return (*prev_exception_filter_ptr())(info);
+    }
     // The exception info supplies a trace from exactly where the issue was,
     // no need to skip records
     crash_handler(0, info->ContextRecord);
