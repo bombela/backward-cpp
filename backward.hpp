@@ -4093,7 +4093,8 @@ private:
     }
   }
 
-  void print_header(std::ostream &os, size_t thread_id) {
+protected:
+  virtual void print_header(std::ostream &os, size_t thread_id) {
     os << "Stack trace (most recent call last)";
     if (thread_id) {
       os << " in thread " << thread_id;
@@ -4101,7 +4102,7 @@ private:
     os << ":\n";
   }
 
-  void print_trace(std::ostream &os, const ResolvedTrace &trace,
+  virtual void print_trace(std::ostream &os, const ResolvedTrace &trace,
                    Colorize &colorize) {
     os << "#" << std::left << std::setw(2) << trace.idx << std::right;
     bool already_indented = true;
@@ -4139,7 +4140,7 @@ private:
     }
   }
 
-  void print_snippet(std::ostream &os, const char *indent,
+  virtual void print_snippet(std::ostream &os, const char *indent,
                      const ResolvedTrace::SourceLoc &source_loc,
                      Colorize &colorize, Color::type color_code,
                      int context_size) {
@@ -4163,7 +4164,7 @@ private:
     }
   }
 
-  void print_source_loc(std::ostream &os, const char *indent,
+  virtual void print_source_loc(std::ostream &os, const char *indent,
                         const ResolvedTrace::SourceLoc &source_loc,
                         void *addr = nullptr) {
     os << indent << "Source \"" << source_loc.filename << "\", line "
@@ -4177,10 +4178,25 @@ private:
 };
 
 /*************** SIGNALS HANDLING ***************/
+class SignalHandlingBase {
+public:
+  template <typename PT, typename = std::enable_if_t<std::is_convertible<PT*, Printer*>::value>>
+  static void set_printer() {
+    get_printer() = std::make_shared<PT>();
+  }
+protected:
+  typedef std::shared_ptr<Printer> pPrinter;
+  static pPrinter& get_printer() {
+    static pPrinter printer;
+    if (!printer)
+      printer = std::make_shared<Printer>();
+    return printer;
+  }
+};
 
 #if defined(BACKWARD_SYSTEM_LINUX) || defined(BACKWARD_SYSTEM_DARWIN)
 
-class SignalHandling {
+class SignalHandling : SignalHandlingBase {
 public:
   static std::vector<int> make_default_signals() {
     const int posix_signals[] = {
@@ -4290,9 +4306,9 @@ public:
       st.load_here(32, reinterpret_cast<void *>(uctx), info->si_addr);
     }
 
-    Printer printer;
-    printer.address = true;
-    printer.print(st, stderr);
+    pPrinter printer = get_printer();
+    printer->address = true;
+    printer->print(st, stderr);
 
 #if (defined(_XOPEN_SOURCE) && _XOPEN_SOURCE >= 700) || \
     (defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L)
@@ -4326,7 +4342,7 @@ private:
 
 #ifdef BACKWARD_SYSTEM_WINDOWS
 
-class SignalHandling {
+class SignalHandling : SignalHandlingBase {
 public:
   SignalHandling(const std::vector<int> & = std::vector<int>())
       : reporter_thread_([]() {
@@ -4483,16 +4499,16 @@ private:
     // macros.
     // StackTrace also requires that the PDBs are already loaded, which is done
     // in the constructor of TraceResolver
-    Printer printer;
+    pPrinter printer = get_printer();
 
     StackTrace st;
-    st.set_machine_type(printer.resolver().machine_type());
+    st.set_machine_type(printer->resolver().machine_type());
     st.set_thread_handle(thread_handle());
     st.load_here(32 + skip_frames, ctx());
     st.skip_n_firsts(skip_frames);
 
-    printer.address = true;
-    printer.print(st, std::cerr);
+    printer->address = true;
+    printer->print(st, std::cerr);
   }
 };
 
