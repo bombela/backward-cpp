@@ -330,10 +330,10 @@
 #endif
 #endif // defined(BACKWARD_SYSTEM_DARWIN)
 
+#include <mutex>
 #if defined(BACKWARD_SYSTEM_WINDOWS)
 
 #include <condition_variable>
-#include <mutex>
 #include <thread>
 
 #include <basetsd.h>
@@ -4227,7 +4227,7 @@ public:
       struct sigaction action;
       memset(&action, 0, sizeof action);
       action.sa_flags =
-          static_cast<int>(SA_SIGINFO | SA_ONSTACK | SA_NODEFER | SA_RESETHAND);
+          static_cast<int>(SA_SIGINFO | SA_ONSTACK | SA_NODEFER);
       sigfillset(&action.sa_mask);
       sigdelset(&action.sa_mask, posix_signals[i]);
 #if defined(__clang__)
@@ -4305,16 +4305,16 @@ public:
 private:
   details::handle<char *> _stack_content;
   bool _loaded;
+  static std::mutex _mu;
 
 #ifdef __GNUC__
   __attribute__((noreturn))
 #endif
   static void
   sig_handler(int signo, siginfo_t *info, void *_ctx) {
+    std::lock_guard lk(_mu);
     handleSignal(signo, info, _ctx);
 
-    // try to forward the signal.
-    raise(info->si_signo);
 
     // terminate the process immediately.
     puts("watf? exit");
