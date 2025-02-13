@@ -4163,11 +4163,20 @@ private:
     }
   }
 
-  void print_source_loc(std::ostream &os, const char *indent,
+   void print_source_loc(std::ostream &os, const char *indent,
                         const ResolvedTrace::SourceLoc &source_loc,
                         void *addr = nullptr) {
-    os << indent << "Source \"" << source_loc.filename << "\", line "
-       << source_loc.line << ", in " << source_loc.function;
+
+#ifdef BACKWARD_SYSTEM_WINDOWS 
+    //Visual Studio supports a specific format for placing line/file links in output window.
+    //This allows double clicking on the line in the output window, which opens that corresponding file & file
+    os << "\n";//Need a newline or it does not work
+    os << source_loc.filename << "(" << source_loc.line << "):";//This exact format is required
+    os << " line "  << source_loc.line << ", in " << source_loc.function;
+#else
+	  os << indent << "Source \"" << source_loc.filename << "\", line "
+		  << source_loc.line << ", in " << source_loc.function;
+#endif
 
     if (address && addr != nullptr) {
       os << " [" << addr << "]";
