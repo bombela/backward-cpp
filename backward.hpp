@@ -4081,8 +4081,8 @@ private:
   TraceResolver _resolver;
   SnippetFactory _snippets;
 
-  template <typename ST>
-  void print_stacktrace(ST &st, std::ostream &os, Colorize &colorize) {
+  template <typename ST, typename Ostream = std::ostream>
+  void print_stacktrace(ST &st, Ostream &os, Colorize &colorize) {
     print_header(os, st.thread_id());
     _resolver.load_stacktrace(st);
     if ( reverse ) {
@@ -4096,8 +4096,8 @@ private:
     }
   }
 
-  template <typename IT>
-  void print_stacktrace(IT begin, IT end, std::ostream &os, size_t thread_id,
+  template <typename IT, typename Ostream = std::ostream>
+  void print_stacktrace(IT begin, IT end, Ostream &os, size_t thread_id,
                         Colorize &colorize) {
     print_header(os, thread_id);
     for (; begin != end; ++begin) {
@@ -4105,7 +4105,8 @@ private:
     }
   }
 
-  void print_header(std::ostream &os, size_t thread_id) {
+  template <typename Ostream = std::ostream>
+  void print_header(Ostream &os, size_t thread_id) {
     os << "Stack trace (most recent call last)";
     if (thread_id) {
       os << " in thread " << thread_id;
@@ -4113,7 +4114,8 @@ private:
     os << ":\n";
   }
 
-  void print_trace(std::ostream &os, const ResolvedTrace &trace,
+  template <typename Ostream = std::ostream>
+  void print_trace(Ostream &os, const ResolvedTrace &trace,
                    Colorize &colorize) {
     os << "#" << std::left << std::setw(2) << trace.idx << std::right;
     bool already_indented = true;
@@ -4151,7 +4153,8 @@ private:
     }
   }
 
-  void print_snippet(std::ostream &os, const char *indent,
+  template <typename Ostream = std::ostream>
+  void print_snippet(Ostream &os, const char *indent,
                      const ResolvedTrace::SourceLoc &source_loc,
                      Colorize &colorize, Color::type color_code,
                      int context_size) {
@@ -4175,7 +4178,8 @@ private:
     }
   }
 
-  void print_source_loc(std::ostream &os, const char *indent,
+  template <typename Ostream = std::ostream>
+  void print_source_loc(Ostream &os, const char *indent,
                         const ResolvedTrace::SourceLoc &source_loc,
                         void *addr = nullptr) {
     os << indent << "Source \"" << source_loc.filename << "\", line "
