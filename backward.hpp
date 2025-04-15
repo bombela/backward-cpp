@@ -3663,6 +3663,10 @@ public:
     image_type = h->FileHeader.Machine;
   }
 
+  ~TraceResolverImpl() {
+    SymCleanup(GetCurrentProcess());
+  }
+
   static const int max_sym_len = 255;
   struct symbol_t {
     SYMBOL_INFO sym;
@@ -3673,6 +3677,15 @@ public:
 
   ResolvedTrace resolve(ResolvedTrace t) override {
     HANDLE process = GetCurrentProcess();
+
+    std::string mod_info_str = "";
+    HMODULE hmod = (HMODULE)SymGetModuleBase64(process, (DWORD64)t.addr);
+    if(hmod) {
+      const auto mod_info = get_mod_info(process)(hmod);
+      std::stringstream stream;
+      stream << mod_info.module_name << " (base 0x" << std::hex << (DWORD64)mod_info.base_address << ")";
+      mod_info_str = stream.str();
+    }
 
     char name[256];
 
@@ -3708,7 +3721,7 @@ public:
     }
 
     t.source.function = name;
-    t.object_filename = "";
+    t.object_filename = mod_info_str;
     t.object_function = name;
 
     return t;
