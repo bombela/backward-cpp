@@ -250,8 +250,8 @@
 
 #if BACKWARD_HAS_DWARF == 1
 #include <algorithm>
-#include <dwarf.h>
-#include <libdwarf.h>
+#include <libdwarf/dwarf.h>
+#include <libdwarf/libdwarf.h>
 #include <libelf.h>
 #include <map>
 #endif
