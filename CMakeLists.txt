@@ -60,6 +60,12 @@ if (DEFINED ENV{OMPI_CXX} OR DEFINED ENV{MPICH_CXX})
    endif()
 endif()
 
+# Check if compiler is clang-cl.
+set(COMPILER_IS_CLANG_CL false)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+  set(COMPILER_IS_CLANG_CL true)
+endif()
+
 # set CXX standard
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_STANDARD 11)
@@ -69,11 +75,16 @@ if (${COMPILER_IS_NVCC})
 endif()
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_COMPILER_IS_GNUCXX)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-	if (NOT ${COMPILER_IS_NVCC})
-	  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pedantic-errors")
+	if (${COMPILER_IS_CLANG_CL})
+	  # clang-cl either needs MSVC options or options passed through with "/clang:<arg>".
+	  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /clang:-Wall /clang:-Wextra /clang:-pedantic-errors /clang:-g")
+	else()
+	  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+	  if (NOT ${COMPILER_IS_NVCC})
+	    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pedantic-errors")
+	  endif()
+	  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 	endif()
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 endif()
 
 ###############################################################################
