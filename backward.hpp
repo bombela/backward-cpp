@@ -954,7 +954,7 @@ public:
           reinterpret_cast<void *>(uctx->uc_mcontext.gregs[REG_EIP]);
       ++index;
       ctx = *reinterpret_cast<unw_context_t *>(uctx);
-#elif defined(__arm__)
+#elif defined(__arm__)     // clang libunwind/arm
       // libunwind uses its own context type for ARM unwinding.
       // Copy the registers from the signal handler's context so we can
       // unwind
@@ -984,6 +984,24 @@ public:
             uctx->uc_mcontext.arm_lr - sizeof(unsigned long);
       }
       _stacktrace[index] = reinterpret_cast<void *>(ctx.regs[UNW_ARM_R15]);
+      ++index;
+#elif defined(__aarch64__) // gcc libunwind/arm64
+      unw_getcontext(&ctx);
+      // If the IP is the same as the crash address we have a bad function
+      // dereference The caller's address is pointed to by the link pointer, so
+      // we dereference that value and set it to be the next frame's IP.
+      if (uctx->uc_mcontext.pc == reinterpret_cast<__uint64_t>(error_addr())) {
+        uctx->uc_mcontext.pc = uctx->uc_mcontext.regs[UNW_TDEP_IP];
+      }
+
+      // 29 general purpose registers
+      for (int i = UNW_AARCH64_X0; i <= UNW_AARCH64_X28; i++) {
+        ctx.uc_mcontext.regs[i] = uctx->uc_mcontext.regs[i];
+      }
+      ctx.uc_mcontext.sp = uctx->uc_mcontext.sp;
+      ctx.uc_mcontext.pc = uctx->uc_mcontext.pc;
+      ctx.uc_mcontext.fault_address = uctx->uc_mcontext.fault_address;
+      _stacktrace[index] = reinterpret_cast<void *>(ctx.uc_mcontext.pc);
       ++index;
 #elif defined(__APPLE__) && defined(__x86_64__)
       unw_getcontext(&ctx);
@@ -1160,10 +1178,18 @@ public:
     s.AddrStack.Mode = AddrModeFlat;
     s.AddrFrame.Mode = AddrModeFlat;
     s.AddrPC.Mode = AddrModeFlat;
-#ifdef _M_X64
+#if defined(_M_X64)
     s.AddrPC.Offset = ctx_->Rip;
     s.AddrStack.Offset = ctx_->Rsp;
     s.AddrFrame.Offset = ctx_->Rbp;
+#elif defined(_M_ARM64)
+    s.AddrPC.Offset = ctx_->Pc;
+    s.AddrStack.Offset = ctx_->Sp;
+    s.AddrFrame.Offset = ctx_->Fp;
+#elif defined(_M_ARM)
+    s.AddrPC.Offset = ctx_->Pc;
+    s.AddrStack.Offset = ctx_->Sp;
+    s.AddrFrame.Offset = ctx_->R11;
 #else
     s.AddrPC.Offset = ctx_->Eip;
     s.AddrStack.Offset = ctx_->Esp;
@@ -1171,8 +1197,12 @@ public:
 #endif
 
     if (!machine_type_) {
-#ifdef _M_X64
+#if defined(_M_X64)
       machine_type_ = IMAGE_FILE_MACHINE_AMD64;
+#elif defined(_M_ARM64)
+      machine_type_ = IMAGE_FILE_MACHINE_ARM64;
+#elif defined(_M_ARM)
+      machine_type_ = IMAGE_FILE_MACHINE_ARMNT;
 #else
       machine_type_ = IMAGE_FILE_MACHINE_I386;
 #endif
@@ -4251,6 +4281,8 @@ public:
 #elif defined(__mips__)
     error_addr = reinterpret_cast<void *>(
         reinterpret_cast<struct sigcontext *>(&uctx->uc_mcontext)->sc_pc);
+#elif defined(__APPLE__) && defined(__POWERPC__)
+    error_addr = reinterpret_cast<void *>(uctx->uc_mcontext->__ss.__srr0);
 #elif defined(__ppc__) || defined(__powerpc) || defined(__powerpc__) ||        \
     defined(__POWERPC__)
     error_addr = reinterpret_cast<void *>(uctx->uc_mcontext.regs->nip);
@@ -4262,6 +4294,8 @@ public:
     error_addr = reinterpret_cast<void *>(uctx->uc_mcontext->__ss.__rip);
 #elif defined(__APPLE__)
     error_addr = reinterpret_cast<void *>(uctx->uc_mcontext->__ss.__eip);
+#elif defined(__loongarch__)
+    error_addr = reinterpret_cast<void *>(uctx->uc_mcontext.__pc);
 #else
 #warning ":/ sorry, ain't know no nothing none not of your architecture!"
 #endif
