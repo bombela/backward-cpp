@@ -81,17 +81,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <new>
 #include <sstream>
 #include <streambuf>
 #include <string>
 #include <vector>
-#include <exception>
-#include <iterator>
 
 #if defined(BACKWARD_SYSTEM_LINUX)
 
@@ -121,6 +121,18 @@
 //
 // Note that only one of the define should be set to 1 at a time.
 //
+#ifndef BACKWARD_HAS_UNWIND
+#define BACKWARD_HAS_UNWIND 0
+#endif
+
+#ifndef BACKWARD_HAS_LIBUNWIND
+#define BACKWARD_HAS_LIBUNWIND 0
+#endif
+
+#ifndef BACKWARD_HAS_BACKTRACE
+#define BACKWARD_HAS_BACKTRACE 0
+#endif
+
 #if BACKWARD_HAS_UNWIND == 1
 #elif BACKWARD_HAS_LIBUNWIND == 1
 #elif BACKWARD_HAS_BACKTRACE == 1
@@ -184,6 +196,23 @@
 //
 // Note that only one of the define should be set to 1 at a time.
 //
+
+#ifndef BACKWARD_HAS_DW
+#define BACKWARD_HAS_DW 0
+#endif
+
+#ifndef BACKWARD_HAS_BFD
+#define BACKWARD_HAS_BFD 0
+#endif
+
+#ifndef BACKWARD_HAS_DWARF
+#define BACKWARD_HAS_DWARF 0
+#endif
+
+#ifndef BACKWARD_HAS_BACKTRACE_SYMBOL
+#define BACKWARD_HAS_BACKTRACE_SYMBOL 0
+#endif
+
 #if BACKWARD_HAS_DW == 1
 #elif BACKWARD_HAS_BFD == 1
 #elif BACKWARD_HAS_DWARF == 1
@@ -218,9 +247,9 @@
 #include <asm/ptrace.h>
 #endif
 #include <signal.h>
-#include <sys/stat.h>
 #include <syscall.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -424,6 +453,7 @@ using std::move;
 } // namespace backward
 #else // NOT BACKWARD_ATLEAST_CXX11
 #define nullptr NULL
+#define constexpr const
 #define override
 #include <map>
 namespace backward {
@@ -442,7 +472,7 @@ namespace details {
 #if defined(BACKWARD_SYSTEM_WINDOWS)
 const char kBackwardPathDelimiter[] = ";";
 #else
-const char kBackwardPathDelimiter[] = ":";
+constexpr char kBackwardPathDelimiter[] = ":";
 #endif
 } // namespace details
 } // namespace backward
@@ -518,7 +548,7 @@ template <typename R, typename T, R (*F)(T)> struct deleter {
 };
 
 template <typename T> struct default_delete {
-  void operator()(T &ptr) const { delete ptr; }
+  void operator()(const T &ptr) const { delete ptr; }
 };
 
 template <typename T, typename Deleter = deleter<void, void *, &::free> >
@@ -933,7 +963,7 @@ public:
     // the rest
 
     if (context()) {
-      ucontext_t *uctx = reinterpret_cast<ucontext_t *>(context());
+      ucontext_t *uctx = static_cast<ucontext_t *>(context());
 #ifdef REG_RIP         // x86_64
       if (uctx->uc_mcontext.gregs[REG_RIP] ==
           reinterpret_cast<greg_t>(error_addr())) {
@@ -1083,14 +1113,14 @@ public:
     return size();
   }
 
-  size_t load_from(void *addr, size_t depth = 32, void *context = nullptr,
+  size_t load_from(const void *addr, size_t depth = 32, void *context = nullptr,
                    void *error_addr = nullptr) {
     load_here(depth + 8, context, error_addr);
 
     for (size_t i = 0; i < _stacktrace.size(); ++i) {
       if (_stacktrace[i] == addr) {
         skip_n_firsts(i);
-        _stacktrace[i] = (void *)((uintptr_t)_stacktrace[i]);
+        _stacktrace[i] = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(_stacktrace[i]));
         break;
       }
     }
@@ -1821,7 +1851,7 @@ public:
       _dwfl_cb.reset(new Dwfl_Callbacks);
       _dwfl_cb->find_elf = &dwfl_linux_proc_find_elf;
       _dwfl_cb->find_debuginfo = &dwfl_standard_find_debuginfo;
-      _dwfl_cb->debuginfo_path = 0;
+      _dwfl_cb->debuginfo_path = nullptr;
 
       _dwfl_handle.reset(dwfl_begin(_dwfl_cb.get()));
       _dwfl_handle_initialized = true;
@@ -1833,7 +1863,7 @@ public:
       // ...from the current process.
       dwfl_report_begin(_dwfl_handle.get());
       int r = dwfl_linux_proc_report(_dwfl_handle.get(), getpid());
-      dwfl_report_end(_dwfl_handle.get(), NULL, NULL);
+      dwfl_report_end(_dwfl_handle.get(), nullptr, nullptr);
       if (r < 0) {
         return trace;
       }
@@ -1850,7 +1880,7 @@ public:
     if (mod) {
       // now that we found it, lets get the name of it, this will be the
       // full path to the running binary or one of the loaded library.
-      const char *module_name = dwfl_module_info(mod, 0, 0, 0, 0, 0, 0, 0);
+      const char *module_name = dwfl_module_info(mod, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
       if (module_name) {
         trace.object_filename = module_name;
       }
@@ -1939,7 +1969,7 @@ public:
     Dwarf_Line *srcloc = dwarf_getsrc_die(cudie, trace_addr - mod_bias);
 
     if (srcloc) {
-      const char *srcfile = dwarf_linesrc(srcloc, 0, 0);
+      const char *srcfile = dwarf_linesrc(srcloc, nullptr, nullptr);
       if (srcfile) {
         trace.source.filename = srcfile;
       }
@@ -1971,9 +2001,9 @@ private:
   // defined here because in C++98, template function cannot take locally
   // defined types... grrr.
   struct inliners_search_cb {
-    void operator()(Dwarf_Die *die) {
+    void operator()(Dwarf_Die *die) const {
+      const char *name;
       switch (dwarf_tag(die)) {
-        const char *name;
       case DW_TAG_subprogram:
         if ((name = dwarf_diename(die))) {
           trace.source.function = name;
@@ -2039,7 +2069,7 @@ private:
   static Dwarf_Die *find_fundie_by_pc(Dwarf_Die *parent_die, Dwarf_Addr pc,
                                       Dwarf_Die *result) {
     if (dwarf_child(parent_die, result) != 0) {
-      return 0;
+      return nullptr;
     }
 
     Dwarf_Die *die = result;
@@ -2067,7 +2097,7 @@ private:
         }
       }
     } while (dwarf_siblingof(die, result) == 0);
-    return 0;
+    return nullptr;
   }
 
   template <typename CB>
@@ -2109,23 +2139,23 @@ private:
     dwarf_formudata(dwarf_attr(die, DW_AT_call_file, &attr_mem), &file_idx);
 
     if (file_idx == 0) {
-      return 0;
+      return nullptr;
     }
 
     Dwarf_Die die_mem;
-    Dwarf_Die *cudie = dwarf_diecu(die, &die_mem, 0, 0);
+    Dwarf_Die *cudie = dwarf_diecu(die, &die_mem, nullptr, nullptr);
     if (!cudie) {
-      return 0;
+      return nullptr;
     }
 
-    Dwarf_Files *files = 0;
+    Dwarf_Files *files = nullptr;
     size_t nfiles;
     dwarf_getsrcfiles(cudie, &files, &nfiles);
     if (!files) {
-      return 0;
+      return nullptr;
     }
 
-    return dwarf_filesrc(files, file_idx, 0, 0);
+    return dwarf_filesrc(files, file_idx, nullptr, nullptr);
   }
 };
 #endif // BACKWARD_HAS_DW == 1
@@ -3777,7 +3807,7 @@ public:
     // but look, I will reuse it two times!
     // What a good boy am I.
     struct isspace {
-      bool operator()(char c) { return std::isspace(c); }
+      bool operator()(char c) const { return std::isspace(c); }
     };
 
     bool started = false;
@@ -3808,14 +3838,14 @@ public:
   // there is no find_if_not in C++98, lets do something crappy to
   // workaround.
   struct not_isspace {
-    bool operator()(char c) { return !std::isspace(c); }
+    bool operator()(char c) const { return !std::isspace(c); }
   };
   // and define this one here because C++98 is not happy with local defined
   // struct passed to template functions, fuuuu.
   struct not_isempty {
-    bool operator()(const lines_t::value_type &p) {
-      return !(std::find_if(p.second.begin(), p.second.end(), not_isspace()) ==
-               p.second.end());
+    bool operator()(const lines_t::value_type &p) const {
+      return std::find_if(p.second.begin(), p.second.end(), not_isspace()) !=
+               p.second.end();
     }
   };
 
@@ -4105,7 +4135,7 @@ private:
     }
   }
 
-  void print_header(std::ostream &os, size_t thread_id) {
+  static void print_header(std::ostream &os, size_t thread_id) {
     os << "Stack trace (most recent call last)";
     if (thread_id) {
       os << " in thread " << thread_id;
@@ -4177,7 +4207,7 @@ private:
 
   void print_source_loc(std::ostream &os, const char *indent,
                         const ResolvedTrace::SourceLoc &source_loc,
-                        void *addr = nullptr) {
+                        const void *addr = nullptr) const {
     os << indent << "Source \"" << source_loc.filename << "\", line "
        << source_loc.line << ", in " << source_loc.function;
 
@@ -4221,7 +4251,7 @@ public:
       : _loaded(false) {
     bool success = true;
 
-    const size_t stack_size = 1024 * 1024 * 8;
+    constexpr size_t stack_size = 1024 * 1024 * 8;
     _stack_content.reset(static_cast<char *>(malloc(stack_size)));
     if (_stack_content) {
       stack_t ss;
