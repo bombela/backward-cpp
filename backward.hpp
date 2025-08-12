@@ -985,6 +985,29 @@ public:
       }
       _stacktrace[index] = reinterpret_cast<void *>(ctx.regs[UNW_ARM_R15]);
       ++index;
+
+#elif defined(__APPLE__) && (defined(__arm__) || defined(__arm64__)) //apple arm m1
+            unw_getcontext(&ctx);
+
+            // If the IP is the same as the crash address we have a bad function
+            // dereference The caller's address is pointed to by the link
+            // pointer, so we dereference that value and set it to be the next
+            // frame's IP.
+            if (uctx->uc_mcontext->__ss.__pc ==
+                reinterpret_cast<__uint64_t>(error_addr())) {
+                uctx->uc_mcontext->__ss.__pc = uctx->uc_mcontext->__ss.__lr;
+            }
+
+            // 29 general purpose registers
+            for (int i = 0; i <= 28; i++) {
+                ctx.data[i] = uctx->uc_mcontext->__ss.__x[i];
+            }
+            ctx.data[29] = uctx->uc_mcontext->__ss.__fp;
+            ctx.data[30] = uctx->uc_mcontext->__ss.__lr;
+            ctx.data[31] = uctx->uc_mcontext->__ss.__sp;
+            ctx.data[32] = uctx->uc_mcontext->__ss.__pc;
+            _stacktrace[index] = reinterpret_cast<void *>(ctx.data[32]);
+            ++index;
 #elif defined(__aarch64__) // gcc libunwind/arm64
       unw_getcontext(&ctx);
       // If the IP is the same as the crash address we have a bad function
