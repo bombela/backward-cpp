@@ -365,6 +365,10 @@
 #include <mutex>
 #include <thread>
 
+#ifdef BACKWARD_ATLEAST_CXX11
+#include <atomic>
+#endif
+
 #include <basetsd.h>
 
 #ifdef _WIN64
@@ -4459,6 +4463,18 @@ public:
   }
 
 private:
+#ifdef BACKWARD_ATLEAST_CXX11
+  // Re-entrancy guard: ensure we only handle a crash once.
+  static std::atomic<bool> &handling_in_progress() {
+    static std::atomic<bool> flag{false};
+    return flag;
+  }
+
+  static bool begin_handling_once() {
+    bool expected = false;
+    return handling_in_progress().compare_exchange_strong(expected, true, std::memory_order_acq_rel);
+  }
+#endif
   static CONTEXT *ctx() {
     static CONTEXT data;
     return &data;
@@ -4513,11 +4529,21 @@ private:
   }
 
   static inline void terminator() {
+#ifdef BACKWARD_ATLEAST_CXX11
+    if (!begin_handling_once()) {
+      return;
+    }
+#endif
     crash_handler(signal_skip_recs);
     abort();
   }
 
   static inline void signal_handler(int) {
+#ifdef BACKWARD_ATLEAST_CXX11
+    if (!begin_handling_once()) {
+      return;
+    }
+#endif
     crash_handler(signal_skip_recs);
     abort();
   }
@@ -4527,6 +4553,11 @@ private:
                                                        const wchar_t *,
                                                        unsigned int,
                                                        uintptr_t) {
+#ifdef BACKWARD_ATLEAST_CXX11
+    if (!begin_handling_once()) {
+      return;
+    }
+#endif
     crash_handler(signal_skip_recs);
     abort();
   }
@@ -4542,6 +4573,12 @@ private:
         info->ExceptionRecord->ExceptionCode == 0xE06D7363) {
       return (*prev_exception_filter_ptr())(info);
     }
+#ifdef BACKWARD_ATLEAST_CXX11
+    // Only the first crash should be processed.
+    if (!begin_handling_once()) {
+      return EXCEPTION_CONTINUE_SEARCH;
+    }
+#endif
     exc_rec() = *(info->ExceptionRecord);
 
     // The exception info supplies a trace from exactly where the issue was,
