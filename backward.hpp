@@ -1003,7 +1003,8 @@ public:
       ctx.uc_mcontext.fault_address = uctx->uc_mcontext.fault_address;
       _stacktrace[index] = reinterpret_cast<void *>(ctx.uc_mcontext.pc);
       ++index;
-#elif defined(__APPLE__) && defined(__x86_64__)
+#elif defined(__APPLE__)
+   #if defined(__x86_64__)
       unw_getcontext(&ctx);
       // OS X's implementation of libunwind uses its own context object
       // so we need to convert the passed context to libunwind's format
@@ -1037,7 +1038,7 @@ public:
       }
       _stacktrace[index] = reinterpret_cast<void *>(ctx.data[16]);
       ++index;
-#elif defined(__APPLE__)
+   #elif defined(__i386__)
       unw_getcontext(&ctx)
           // TODO: Convert the ucontext_t to libunwind's unw_context_t like
           // we do in 64 bits
@@ -1048,6 +1049,18 @@ public:
       _stacktrace[index] =
           reinterpret_cast<void *>(ctx.uc_mcontext->__ss.__eip);
       ++index;
+   #else // PowerPC
+      unw_getcontext(&ctx)
+          // TODO: Convert the ucontext_t to libunwind's unw_context_t like
+          // we do in x86_64 case.
+          if (ctx.uc_mcontext->__ss.__srr0 ==
+              reinterpret_cast<greg_t>(error_addr())) {
+        ctx.uc_mcontext->__ss.__srr0 = ctx.uc_mcontext->__ss.__r1;
+      }
+      _stacktrace[index] =
+          reinterpret_cast<void *>(ctx.uc_mcontext->__ss.__srr0);
+      ++index;
+   #endif
 #endif
     }
 
