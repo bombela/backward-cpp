@@ -92,6 +92,7 @@
 #include <vector>
 #include <exception>
 #include <iterator>
+#include <memory>
 
 #if defined(BACKWARD_SYSTEM_LINUX)
 
@@ -4194,6 +4195,18 @@ private:
 
 class SignalHandling {
 public:
+  using PrinterPtr = std::shared_ptr<Printer>;
+
+  // Replace the default printer with a custom one.
+  // The supplied printer is stored and used by all signal handling output.
+  void set_printer(PrinterPtr printer) {
+    if (printer) {
+      printer_ = std::move(printer);
+    }
+  }
+
+  PrinterPtr get_printer() const { return printer_; }
+
   static std::vector<int> make_default_signals() {
     const int posix_signals[] = {
       // Signals for which the default action is "Core".
@@ -4218,7 +4231,14 @@ public:
   }
 
   SignalHandling(const std::vector<int> &posix_signals = make_default_signals())
-      : _loaded(false) {
+      : _loaded(false), printer_(std::make_shared<Printer>()) {
+    // Default printer configuration (can be overwritten via set_printer()).
+    printer_->snippet = false;
+    printer_->address = false;
+    printer_->object = false;
+    printer_->inliner_context_size = 0;
+    printer_->trace_context_size = 0;
+    instance() = this;
     bool success = true;
 
     const size_t stack_size = 1024 * 1024 * 8;
@@ -4257,6 +4277,12 @@ public:
     }
 
     _loaded = success;
+  }
+
+  ~SignalHandling() {
+    if (instance() == this) {
+      instance() = nullptr;
+    }
   }
 
   bool loaded() const { return _loaded; }
@@ -4306,9 +4332,8 @@ public:
       st.load_here(32, reinterpret_cast<void *>(uctx), info->si_addr);
     }
 
-    Printer printer;
-    printer.address = true;
-    printer.print(st, stderr);
+    // Use the configured printer.
+    instance()->printer_->print(st, stderr);
 
 #if (defined(_XOPEN_SOURCE) && _XOPEN_SOURCE >= 700) || \
     (defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L)
@@ -4319,8 +4344,14 @@ public:
   }
 
 private:
+  static SignalHandling *&instance() {
+    static SignalHandling *inst = nullptr;
+    return inst;
+  }
+
   details::handle<char *> _stack_content;
   bool _loaded;
+  PrinterPtr printer_;
 
 #ifdef __GNUC__
   __attribute__((noreturn))
@@ -4344,8 +4375,18 @@ private:
 
 class SignalHandling {
 public:
+  using PrinterPtr = std::shared_ptr<Printer>;
+
+  void set_printer(PrinterPtr printer) {
+    if (printer) {
+      printer_ = std::move(printer);
+    }
+  }
+
+  PrinterPtr get_printer() const { return printer_; }
+
   SignalHandling(const std::vector<int> & = std::vector<int>())
-      : reporter_thread_([]() {
+      : printer_(std::make_shared<Printer>()), reporter_thread_([]() {
           /* We handle crashes in a utility thread:
             backward structures and some Windows functions called here
             need stack space, which we do not have when we encounter a
@@ -4367,6 +4408,9 @@ public:
           }
           cv().notify_one();
         }) {
+    // Default printer configuration (can be overwritten via set_printer()).
+    printer_->address = true;
+    instance() = this;
     SetUnhandledExceptionFilter(crash_handler);
 
     signal(SIGABRT, signal_handler);
@@ -4382,6 +4426,9 @@ public:
   bool loaded() const { return true; }
 
   ~SignalHandling() {
+    if (instance() == this) {
+      instance() = nullptr;
+    }
     {
       std::unique_lock<std::mutex> lk(mtx());
       crashed() = crash_status::normal_exit;
@@ -4393,6 +4440,10 @@ public:
   }
 
 private:
+  static SignalHandling *&instance() {
+    static SignalHandling *inst = nullptr;
+    return inst;
+  }
   static CONTEXT *ctx() {
     static CONTEXT data;
     return &data;
@@ -4499,7 +4550,8 @@ private:
     // macros.
     // StackTrace also requires that the PDBs are already loaded, which is done
     // in the constructor of TraceResolver
-    Printer printer;
+    auto *inst = instance();
+    auto &printer = *inst->printer_;
 
     StackTrace st;
     st.set_machine_type(printer.resolver().machine_type());
@@ -4507,9 +4559,10 @@ private:
     st.load_here(32 + skip_frames, ctx());
     st.skip_n_firsts(skip_frames);
 
-    printer.address = true;
     printer.print(st, std::cerr);
   }
+
+  PrinterPtr printer_;
 };
 
 #endif // BACKWARD_SYSTEM_WINDOWS
@@ -4519,6 +4572,9 @@ private:
 class SignalHandling {
 public:
   SignalHandling(const std::vector<int> & = std::vector<int>()) {}
+  using PrinterPtr = std::shared_ptr<Printer>;
+  void set_printer(PrinterPtr) {}
+  PrinterPtr get_printer() const { return PrinterPtr{}; }
   bool init() { return false; }
   bool loaded() { return false; }
 };
