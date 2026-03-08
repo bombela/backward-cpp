@@ -2279,7 +2279,7 @@ public:
 
 public:
   static int close_dwarf(Dwarf_Debug dwarf) {
-    return dwarf_finish(dwarf, NULL);
+    return dwarf_finish(dwarf);
   }
 
 private:
@@ -2494,8 +2494,8 @@ private:
     Dwarf_Error error = DW_DLE_NE;
     dwarf_handle_t dwarf_handle;
 
-    int dwarf_result = dwarf_elf_init(elf_handle.get(), DW_DLC_READ, NULL, NULL,
-                                      &dwarf_debug, &error);
+    int dwarf_result = dwarf_init_b(file_handle.get(), DW_GROUPNUMBER_ANY, NULL,
+                                    NULL, &dwarf_debug, &error);
 
     // We don't do any special handling for DW_DLV_NO_ENTRY specially.
     // If we get an error, or the file doesn't have debug information
@@ -2597,7 +2597,8 @@ private:
               if (dwarf_attr(current_die, DW_AT_specification, &attr_mem,
                              &error) == DW_DLV_OK) {
                 Dwarf_Off spec_offset = 0;
-                if (dwarf_formref(attr_mem, &spec_offset, &error) ==
+                Dwarf_Bool is_info = 1;
+                if (dwarf_formref(attr_mem, &spec_offset, &is_info, &error) ==
                     DW_DLV_OK) {
                   Dwarf_Off spec_die_offset;
                   if (dwarf_dieoffset(current_die, &spec_die_offset, &error) ==
@@ -2611,7 +2612,7 @@ private:
           }
         }
 
-        int result = dwarf_siblingof(dwarf, current_die, &sibling_die, &error);
+        int result = dwarf_siblingof_c(current_die, &sibling_die, &error);
         if (result == DW_DLV_ERROR) {
           break;
         } else if (result == DW_DLV_NO_ENTRY) {
@@ -2641,11 +2642,12 @@ private:
       if (global) {
         result = dwarf_global_formref(attr_mem, &offset, &error);
       } else {
-        result = dwarf_formref(attr_mem, &offset, &error);
+        Dwarf_Bool is_info = 1;
+        result = dwarf_formref(attr_mem, &offset, &is_info, &error);
       }
 
       if (result == DW_DLV_OK) {
-        if (dwarf_offdie(dwarf, offset, &found_die, &error) != DW_DLV_OK) {
+        if (dwarf_offdie_b(dwarf, offset, 1, &found_die, &error) != DW_DLV_OK) {
           found_die = NULL;
         }
       }
@@ -2690,7 +2692,7 @@ private:
       // that one has the pc we are looking for
       if (it != fobj.current_cu->spec_section.end()) {
         Dwarf_Die spec_die = 0;
-        if (dwarf_offdie(dwarf, it->second, &spec_die, &error) == DW_DLV_OK) {
+        if (dwarf_offdie_b(dwarf, it->second, 1, &spec_die, &error) == DW_DLV_OK) {
           return spec_die;
         }
       }
@@ -2745,27 +2747,79 @@ private:
 
     Dwarf_Attribute attr;
     if (dwarf_attr(die, DW_AT_ranges, &attr, &error) == DW_DLV_OK) {
+      Dwarf_Half form = 0;
+      dwarf_whatform(attr, &form, &error);
 
-      Dwarf_Off offset;
-      if (dwarf_global_formref(attr, &offset, &error) == DW_DLV_OK) {
-        Dwarf_Ranges *ranges;
-        Dwarf_Signed ranges_count = 0;
-        Dwarf_Unsigned byte_count = 0;
+      Dwarf_Unsigned offset_or_index = 0;
+      // DW_FORM_rnglistx
+      if (form == 0x23) {
+        dwarf_formudata(attr, &offset_or_index, &error);
+      } else {
+        Dwarf_Off off = 0;
+        dwarf_global_formref(attr, &off, &error);
+        offset_or_index = off;
+      }
 
-        if (dwarf_get_ranges_a(dwarf, offset, die, &ranges, &ranges_count,
-                               &byte_count, &error) == DW_DLV_OK) {
-          has_ranges = ranges_count != 0;
-          for (int i = 0; i < ranges_count; i++) {
-            if (ranges[i].dwr_addr1 != 0 &&
-                pc >= ranges[i].dwr_addr1 + low_pc &&
-                pc < ranges[i].dwr_addr2 + low_pc) {
-              result = true;
-              break;
+      Dwarf_Rnglists_Head rle_head = 0;
+      Dwarf_Unsigned rle_count = 0;
+      Dwarf_Unsigned global_offset = 0;
+
+      // 1. try dwarf5 .debug_rnglists
+      if (dwarf_rnglists_get_rle_head(attr, form, offset_or_index, &rle_head,
+                                      &rle_count, &global_offset,
+                                      &error) == DW_DLV_OK) {
+        has_ranges = rle_count != 0;
+        for (Dwarf_Unsigned i = 0; i < rle_count; i++) {
+          unsigned int entrylen = 0;
+          unsigned int rle_val = 0;
+          Dwarf_Unsigned raw1 = 0, raw2 = 0;
+          Dwarf_Bool unavail = 0;
+          Dwarf_Unsigned cooked1 = 0, cooked2 = 0;
+          if (dwarf_get_rnglists_entry_fields_a(
+                  rle_head, i, &entrylen, &rle_val, &raw1, &raw2, &unavail,
+                  &cooked1, &cooked2, &error) == DW_DLV_OK) {
+            if (!unavail) {
+              // 0x02=DW_RLE_startx_endx, 0x03=DW_RLE_startx_length,
+              // 0x04=DW_RLE_offset_pair 0x06=DW_RLE_start_end,
+              // 0x07=DW_RLE_start_length
+              if (rle_val == 0x02 || rle_val == 0x03 || rle_val == 0x04 ||
+                  rle_val == 0x06 || rle_val == 0x07) {
+                if (pc >= cooked1 && pc < cooked2) {
+                  result = true;
+                  break;
+                }
+              }
             }
           }
-          dwarf_ranges_dealloc(dwarf, ranges, ranges_count);
+        }
+        dwarf_dealloc_rnglists_head(rle_head);
+      }
+      // 2. baseline, using DWARF4 .debug_ranges
+      else {
+        Dwarf_Off offset;
+        if (dwarf_global_formref(attr, &offset, &error) == DW_DLV_OK) {
+          Dwarf_Ranges *ranges;
+          Dwarf_Signed ranges_count = 0;
+          Dwarf_Unsigned byte_count = 0;
+          Dwarf_Off real_offset = 0;
+
+          if (dwarf_get_ranges_b(dwarf, offset, die, &real_offset, &ranges,
+                                 &ranges_count, &byte_count,
+                                 &error) == DW_DLV_OK) {
+            has_ranges = ranges_count != 0;
+            for (int i = 0; i < ranges_count; i++) {
+              if (ranges[i].dwr_addr1 != 0 &&
+                  pc >= ranges[i].dwr_addr1 + low_pc &&
+                  pc < ranges[i].dwr_addr2 + low_pc) {
+                result = true;
+                break;
+              }
+            }
+            dwarf_dealloc_ranges(dwarf, ranges, ranges_count);
+          }
         }
       }
+      dwarf_dealloc(dwarf, attr, DW_DLA_ATTR);
     }
 
     // Last attempt. We might have a single address set as low_pc.
@@ -3071,7 +3125,7 @@ private:
           }
         }
 
-        int result = dwarf_siblingof(dwarf, current_die, &sibling_die, &error);
+        int result = dwarf_siblingof_c(current_die, &sibling_die, &error);
         if (result == DW_DLV_ERROR) {
           break;
         } else if (result == DW_DLV_NO_ENTRY) {
@@ -3253,7 +3307,7 @@ private:
         }
       }
 
-      int res = dwarf_siblingof(dwarf, current_die, &sibling_die, &error);
+      int res = dwarf_siblingof_c(current_die, &sibling_die, &error);
       if (res == DW_DLV_ERROR) {
         return NULL;
       } else if (res == DW_DLV_NO_ENTRY) {
@@ -3333,7 +3387,7 @@ private:
         cb(current_die, ns);
       }
 
-      int result = dwarf_siblingof(dwarf, current_die, &sibling_die, &error);
+      int result = dwarf_siblingof_c(current_die, &sibling_die, &error);
       if (result == DW_DLV_ERROR) {
         return false;
       } else if (result == DW_DLV_NO_ENTRY) {
@@ -3448,7 +3502,7 @@ private:
       if (returnDie)
         dwarf_dealloc(dwarf, returnDie, DW_DLA_DIE);
 
-      if (dwarf_siblingof(dwarf, 0, &returnDie, &error) == DW_DLV_OK) {
+      if (dwarf_siblingof_b(dwarf, 0, 1, &returnDie, &error) == DW_DLV_OK) {
         if ((dwarf_tag(returnDie, &tag, &error) == DW_DLV_OK) &&
             tag == DW_TAG_compile_unit) {
           if (die_has_pc(fobj, returnDie, addr)) {
@@ -3475,7 +3529,7 @@ private:
     Dwarf_Die cudie;
     while (dwarf_next_cu_header_d(dwarf, 1, 0, 0, 0, 0, 0, 0, 0, 0,
                                   &next_cu_header, 0, &error) == DW_DLV_OK) {
-      if (dwarf_siblingof(dwarf, 0, &cudie, &error) == DW_DLV_OK) {
+      if (dwarf_siblingof_b(dwarf, 0, 1, &cudie, &error) == DW_DLV_OK) {
         Dwarf_Die die_mem = 0;
         Dwarf_Die resultDie = find_fundie_by_pc(fobj, cudie, addr, die_mem);
 
