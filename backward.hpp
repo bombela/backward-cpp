@@ -1589,7 +1589,7 @@ private:
   bool _bfd_loaded;
 
   typedef details::handle<bfd *,
-                          details::deleter<bfd_boolean, bfd *, &bfd_close> >
+                          details::deleter<bool, bfd *, &bfd_close> >
       bfd_handle_t;
 
   typedef details::handle<asymbol **> bfd_symtab_t;
