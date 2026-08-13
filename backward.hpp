@@ -1703,12 +1703,18 @@ private:
     bfd_size_type size = bfd_section_size(section);
 #endif
 
-    // are we in the boundaries of the section?
-    if (addr < sec_addr || addr >= sec_addr + size) {
-      addr -= base_addr; // oops, a relocated object, lets try again...
-      if (addr < sec_addr || addr >= sec_addr + size) {
-        return;
-      }
+    // dladdr() reports dli_fbase as the object's relocation slide, 0 for a
+    // non-PIE executable, so addr - base_addr is always the link-time address.
+    // Test that form first. Testing the raw runtime address first only works
+    // while the slide is larger than the section: a PIE mapped at a low base,
+    // as valgrind does at 0x108000, leaves the runtime address inside the
+    // link-time range of any .text bigger than the slide, and it then resolves
+    // to a wrong but entirely plausible function.
+    const bfd_vma relocated = addr - base_addr;
+    if (relocated >= sec_addr && relocated < sec_addr + size) {
+      addr = relocated;
+    } else if (addr < sec_addr || addr >= sec_addr + size) {
+      return;
     }
 
 #if defined(__clang__)
