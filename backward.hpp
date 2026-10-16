@@ -4613,12 +4613,16 @@ private:
   }
 
   static void handle_stacktrace(int skip_frames = 0) {
-    if(exc_rec().ExceptionCode || exc_rec().ExceptionAddress) {
-      std::cerr << "EXCEPTION 0x" << std::hex << exc_rec().ExceptionCode << " @ 0x" << std::hex << exc_rec().ExceptionAddress << std::dec << std::endl;
-      if(exc_rec().NumberParameters) {
+    if (exc_rec().ExceptionCode || exc_rec().ExceptionAddress) {
+      std::cerr << "EXCEPTION 0x" << std::hex << exc_rec().ExceptionCode
+                << " @ 0x"
+                << reinterpret_cast<uintptr_t>(exc_rec().ExceptionAddress)
+                << std::dec << std::endl;
+      if (exc_rec().NumberParameters) {
         std::cerr << "Exception params: ";
-        for(auto i = 0; i < exc_rec().NumberParameters; i++) {
-          std::cerr << "#" << i << "=0x" << std::hex << exc_rec().ExceptionInformation[i] << std::dec << " ";
+        for (DWORD i = 0; i < exc_rec().NumberParameters; i++) {
+          std::cerr << "#" << i << "=0x" << std::hex
+                    << exc_rec().ExceptionInformation[i] << std::dec << " ";
         }
         std::cerr << std::endl;
       }
