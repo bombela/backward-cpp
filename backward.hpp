@@ -1653,8 +1653,11 @@ public:
 private:
   bool _bfd_loaded;
 
-  typedef details::handle<bfd *,
-                          details::deleter<bool, bfd *, &bfd_close> >
+  // bfd_close returns bfd_boolean (int) before binutils 2.37 and bool since,
+  // the wrapper fits the deleter with both.
+  static void close_bfd(bfd *abfd) { bfd_close(abfd); }
+
+  typedef details::handle<bfd *, details::deleter<void, bfd *, &close_bfd> >
       bfd_handle_t;
 
   typedef details::handle<asymbol **> bfd_symtab_t;
