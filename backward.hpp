@@ -2270,7 +2270,8 @@ public:
     }
 
     trace.object_filename = resolve_exec_path(symbol_info);
-    dwarf_fileobject &fobj = load_object_with_dwarf(symbol_info.dli_fname, trace.object_filename);
+    dwarf_fileobject &fobj =
+        load_object_with_dwarf(symbol_info.dli_fname, trace.object_filename);
     if (!fobj.dwarf_handle) {
       return trace; // sad, we couldn't load the object :(
     }
@@ -2430,7 +2431,8 @@ private:
     return strcmp(a, b) == 0;
   }
 
-  dwarf_fileobject &load_object_with_dwarf(const std::string &filename_object, const std::string &object_filename) {
+  dwarf_fileobject &load_object_with_dwarf(const std::string &filename_object,
+                                           const std::string &object_filename) {
 
     if (!_dwarf_loaded) {
       // Set the ELF library operating version
@@ -2548,8 +2550,11 @@ private:
     if (e_ident[EI_CLASS] == ELFCLASS32) {
       ELF_GET_DATA(32)
     } else if (e_ident[EI_CLASS] == ELFCLASS64) {
-      // libelf might have been built without 64 bit support
+      // libelf might have been built without 64 bit support, elfutils does
+      // not define __LIBELF64 at all and always has it
+#if !defined(__LIBELF64) || __LIBELF64
       ELF_GET_DATA(64)
+#endif
     }
 
     if (!debuglink.empty()) {
@@ -2558,8 +2563,9 @@ private:
       // the elf handle we had already opened.
       dwarf_file_t debuglink_file;
       {
-        char* object_filename_copy = strdup(object_filename.c_str());
-        const std::string directory_path = std::string(dirname(object_filename_copy));
+        char *object_filename_copy = strdup(object_filename.c_str());
+        const std::string directory_path =
+            std::string(dirname(object_filename_copy));
         free(object_filename_copy);
         debuglink_file.reset(
             open((directory_path + '/' + debuglink).c_str(), O_RDONLY));
