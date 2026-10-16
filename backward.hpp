@@ -762,6 +762,7 @@ public:
   size_t thread_id() const { return 0; }
   void skip_n_firsts(size_t) {}
   void *const *begin() const { return nullptr; }
+  size_t load_saved(void *const *, size_t) { return 0; }
 };
 
 class StackTraceImplBase {
@@ -828,6 +829,14 @@ public:
       return &_stacktrace[skip_n_firsts()];
     }
     return nullptr;
+  }
+
+  // Addresses captured earlier, for example by backtrace() in a signal
+  // handler, to be resolved and printed later.
+  size_t load_saved(void *const *addresses, size_t count) {
+    _stacktrace.assign(addresses, addresses + count);
+    skip_n_firsts(0);
+    return size();
   }
 
 protected:

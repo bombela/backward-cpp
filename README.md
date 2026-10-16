@@ -268,6 +268,10 @@ class StackTrace { public:
 	size_t load_here(size_t trace_cnt_max)
 	size_t load_from(void* address, size_t trace_cnt_max)
 
+	// Load addresses captured earlier, for example with backtrace() in a
+	// signal handler, to resolve and print them later. Returns size().
+	size_t load_saved(void* const* addresses, size_t count)
+
 	// The number of traces loaded. This can be less than "trace_cnt_max".
 	size_t size() const
 
