@@ -4341,6 +4341,21 @@ public:
     _loaded = success;
   }
 
+  ~SignalHandling() {
+    // The handlers stay installed after the object is gone, so a later signal
+    // must not run on a freed alternate stack: disable the stack if it is
+    // still ours on this thread, otherwise keep it allocated.
+    stack_t ss;
+    if (_stack_content && sigaltstack(nullptr, &ss) == 0 &&
+        ss.ss_sp == _stack_content.get()) {
+      ss.ss_flags = SS_DISABLE;
+      if (sigaltstack(&ss, nullptr) == 0) {
+        return;
+      }
+    }
+    _stack_content.release();
+  }
+
   bool loaded() const { return _loaded; }
 
   static void handleSignal(int, siginfo_t *info, void *_ctx) {
