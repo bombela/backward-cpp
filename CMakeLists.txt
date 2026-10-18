@@ -21,13 +21,15 @@
 # SOFTWARE.
 
 cmake_minimum_required(VERSION 3.14)
-project(backward CXX)
+project(backward VERSION 1.6 LANGUAGES CXX)
 
 # Introduce variables:
 # * CMAKE_INSTALL_LIBDIR
 # * CMAKE_INSTALL_BINDIR
 # * CMAKE_INSTALL_INCLUDEDIR
 include(GNUInstallDirs)
+
+configure_file(backward.pc.in backward.pc @ONLY)
 
 include(BackwardConfig.cmake)
 
@@ -160,6 +162,10 @@ endif()
 install(
     FILES "backward.hpp"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+install(
+    FILES "${CMAKE_CURRENT_BINARY_DIR}/backward.pc"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
 )
 install(
     FILES "BackwardConfig.cmake"
