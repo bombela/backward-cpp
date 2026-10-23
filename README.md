@@ -1,6 +1,14 @@
 Backward-cpp [![Conan Center](https://img.shields.io/conan/v/backward-cpp)](https://conan.io/center/recipes/backward-cpp)
 ============
 
+NEW MAINTAINER WANTED.
+
+I haven't followed on issues and pull requests in years at this point.
+
+If anybody is interested to take over this project (archive/link/transfer), send me an email.
+
+-----
+
 Backward is a beautiful stack trace pretty printer for C++.
 
 If you are bored to see this:
