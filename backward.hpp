@@ -3627,10 +3627,12 @@ public:
     ret.image_name = temp;
     GetModuleBaseNameA(process, module, temp, sizeof(temp));
     ret.module_name = temp;
-    std::vector<char> img(ret.image_name.begin(), ret.image_name.end());
-    std::vector<char> mod(ret.module_name.begin(), ret.module_name.end());
-    SymLoadModule64(process, 0, &img[0], &mod[0], (DWORD64)ret.base_address,
-                    ret.load_size);
+    char *image_name =
+        ret.image_name.empty() ? nullptr : const_cast<char *>(ret.image_name.c_str());
+    char *module_name =
+        ret.module_name.empty() ? nullptr : const_cast<char *>(ret.module_name.c_str());
+    SymLoadModule64(process, 0, image_name, module_name,
+                    (DWORD64)ret.base_address, ret.load_size);
     return ret;
   }
 };
