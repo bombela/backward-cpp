@@ -1154,6 +1154,15 @@ public:
                    void *error_addr = nullptr) {
     set_context(static_cast<CONTEXT*>(context));
     set_error_addr(error_addr);
+
+    if (!context) {
+      _stacktrace.resize(depth);
+      const WORD capturedFrames = RtlCaptureStackBackTrace(
+          0, static_cast<DWORD>(depth), _stacktrace.data(), NULL);
+      _stacktrace.resize(capturedFrames);
+      return capturedFrames;
+    }
+
     CONTEXT localCtx; // used when no context is provided
 
     if (depth == 0) {
