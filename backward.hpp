@@ -1668,9 +1668,9 @@ private:
       return r; // damned, that's a stripped file that you got there!
     }
 
-    r->handle = move(bfd_handle);
-    r->symtab = move(symtab);
-    r->dynamic_symtab = move(dynamic_symtab);
+    r->handle = details::move(bfd_handle);
+    r->symtab = details::move(symtab);
+    r->dynamic_symtab = details::move(dynamic_symtab);
     return r;
   }
 
@@ -2483,8 +2483,8 @@ private:
         // If we have a valid elf handle, return the new elf handle
         // and file handle and discard the original ones
         if (debuglink_elf) {
-          elf_handle = move(debuglink_elf);
-          file_handle = move(debuglink_file);
+          elf_handle = details::move(debuglink_elf);
+          file_handle = details::move(debuglink_file);
         }
       }
     }
@@ -2506,9 +2506,9 @@ private:
 
     dwarf_handle.reset(dwarf_debug);
 
-    r.file_handle = move(file_handle);
-    r.elf_handle = move(elf_handle);
-    r.dwarf_handle = move(dwarf_handle);
+    r.file_handle = details::move(file_handle);
+    r.elf_handle = details::move(elf_handle);
+    r.dwarf_handle = details::move(dwarf_handle);
 
     return r;
   }
